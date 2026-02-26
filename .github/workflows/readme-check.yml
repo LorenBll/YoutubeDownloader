@@ -84,24 +84,28 @@ jobs:
           $DIFF"
           
           # Call GitHub Models API (free AI access provided by GitHub)
+          PROMPT_JSON=$(echo "$PROMPT" | jq -Rs .)
           RESPONSE=$(curl -s https://models.inference.ai.azure.com/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -d '{
-              "model": "gpt-4o-mini",
-              "messages": [
-                {
-                  "role": "system",
-                  "content": "You are a technical documentation assistant. Analyze code changes and determine if README updates are needed."
-                },
-                {
-                  "role": "user",
-                  "content": "'"$(echo "$PROMPT" | jq -Rs .)"'"
-                }
-              ],
-              "temperature": 0.3,
-              "max_tokens": 10
-            }')
+            -d @- <<EOF
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a technical documentation assistant. Analyze code changes and determine if README updates are needed."
+    },
+    {
+      "role": "user",
+      "content": $PROMPT_JSON
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 10
+}
+EOF
+)
           
           # Extract the answer
           ANSWER=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
