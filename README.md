@@ -19,6 +19,14 @@ Lightweight local API service to download single YouTube videos as mp4 (progress
 
 Many download scripts are one-off and hard to integrate with apps. This project exposes a clean HTTP API that lets desktop tools, web frontends, or automation workflows queue downloads and poll status reliably.
 
+### Client options
+
+Users can interact with this service in several ways:
+
+- **API directly:** Call HTTP endpoints from any language or application
+- **[YoutubeDownloader-Client](https://github.com/LorenBll/youtube-downloader-client):** Dedicated terminal client for easy command-line batch downloads and task management
+- **Custom integrations:** Build your own tools using the REST API
+
 ## Features
 
 - Async download jobs with task IDs
