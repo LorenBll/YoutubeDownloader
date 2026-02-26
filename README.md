@@ -1,0 +1,360 @@
+# YoutubeDownloader (Flask API)
+
+Lightweight local API service to download single YouTube videos as mp4 (progressive) or mp3 (audio-only), with asynchronous job tracking.
+
+## Table of contents
+
+- [Why this project](#why-this-project)
+- [Features](#features)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Installation](#installation)
+- [Background service mode](#background-service-mode)
+- [API reference](#api-reference)
+- [Notes and limitations](#notes-and-limitations)
+- [Configuration](#configuration)
+- [Developer](#developer)
+
+## Why this project
+
+Many download scripts are one-off and hard to integrate with apps. This project exposes a clean HTTP API that lets desktop tools, web frontends, or automation workflows queue downloads and poll status reliably.
+
+## Features
+
+- Async download jobs with task IDs
+- Single-video support for mp4 and mp3
+- Batch request support via `videos` array
+- Input validation with actionable error messages
+- Playlist URL rejection guard (single videos only)
+- Health endpoint with queue/runtime metrics
+- In-memory job retention with automatic cleanup worker
+- Works with `pytubefix` first, falls back to `pytube`
+- Background service mode (runs silently without terminal)
+- Auto-startup configuration for Windows, Linux, and macOS
+
+## Tech stack
+
+- Python 3.10+
+- Flask
+- pytubefix / pytube
+
+## Project structure
+
+```text
+.
+├─ src/
+│  └─ main.py                       # Main Flask application
+├─ scripts/
+│  ├─ run.bat                       # Windows run script
+│  └─ run.sh                        # Unix run script
+├─ deployment/
+│  ├─ startup-windows.vbs           # Windows auto-startup wrapper
+│  ├─ youtube-downloader.service    # Linux systemd service file
+│  └─ com.youtube-downloader.plist  # macOS launchd configuration
+├─ .gitignore                       # Git ignore patterns
+├─ requirements.txt                 # Python dependencies
+├─ LICENSE
+└─ README.md
+```
+
+The project follows a clean organizational structure:
+- **src/**: Application source code
+- **scripts/**: Runtime launch scripts for development and production use
+- **deployment/**: System startup configurations for automatic service launching
+
+## Installation
+
+### Prerequisites
+
+- Python 3.10 or newer
+- Windows, macOS, or Linux
+
+### Quick start
+
+1. Clone the repository:
+    ```bash
+    git clone https://github.com/LorenBll/youtube-downloader.git
+    cd youtube-downloader
+    ```
+
+2. Make the run script executable (macOS/Linux only):
+    ```bash
+    chmod +x scripts/run.sh
+    ```
+
+3. Run the application:
+    - **Windows:**
+       ```bash
+       scripts\run.bat
+       ```
+    - **macOS/Linux:**
+       ```bash
+       ./scripts/run.sh
+       ```
+
+By default, the service starts in the background. To see real-time output and debug information, use the `--verbose` flag:
+    - **Windows:**
+       ```bash
+       scripts\run.bat --verbose
+       ```
+    - **macOS/Linux:**
+       ```bash
+       ./scripts/run.sh --verbose
+       ```
+
+The run scripts will automatically create a virtual environment and install dependencies on first run.
+
+### Manual execution
+
+If you prefer to manage the environment yourself:
+
+1. Create and activate virtual environment:
+    ```bash
+    python -m venv .venv
+    # Windows
+    .venv\Scripts\activate
+    # macOS/Linux
+    source .venv/bin/activate
+    ```
+
+2. Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3. Run the API:
+    ```bash
+    python src/main.py
+    ```
+
+The API binds to `127.0.0.45:8000` by default.
+
+## Background service mode
+
+The run scripts automatically start the service in the background without displaying a terminal window. This allows the web service to run silently in the background while remaining accessible via the HTTP API.
+
+- **Background mode (default):** The terminal closes immediately after startup. The service continues running and listening for API requests.
+- **Verbose mode:** Use the `--verbose` flag to keep the terminal open and observe real-time server output and debug information.
+
+You can query the `/api/health` endpoint to verify the service is running, or check process listings (Task Manager on Windows, or `ps` on macOS/Linux).
+
+### Auto-startup configuration
+
+To have the service start automatically when your system boots, configure the appropriate startup mechanism for your operating system:
+
+#### Windows
+
+**Method 1: Startup Folder (User-level)**
+
+1. Open the startup folder:
+   - Press `Win+R`
+   - Type `shell:startup`
+   - Press Enter
+
+2. Copy `deployment/startup-windows.vbs` to this folder
+
+3. The service will start automatically when you log in
+
+**Method 2: Task Scheduler (System-level)**
+
+1. Open Task Scheduler (`taskschd.msc`)
+
+2. Create a new task:
+   - **General tab:**
+     - Name: YoutubeDownloader API
+     - Run whether user is logged on or not
+     - Run with highest privileges
+
+   - **Triggers tab:**
+     - New trigger: At startup
+     - Delay task for: 30 seconds (recommended)
+
+   - **Actions tab:**
+     - Action: Start a program
+     - Program/script: `wscript.exe`
+     - Arguments: `"C:\path\to\youtube-downloader\deployment\startup-windows.vbs"`
+     - Start in: (leave empty)
+
+   - **Conditions tab:**
+     - Uncheck "Start only if on AC power" (laptops)
+
+3. Save the task
+
+#### Linux (systemd)
+
+1. Edit `deployment/youtube-downloader.service`:
+   - Replace `YOUR_USERNAME` with your actual username
+   - Replace `/path/to/youtube-downloader` with the full path to the project directory
+
+2. Copy the service file:
+   ```bash
+   sudo cp deployment/youtube-downloader.service /etc/systemd/system/
+   ```
+
+3. Reload systemd:
+   ```bash
+   sudo systemctl daemon-reload
+   ```
+
+4. Enable the service to start at boot:
+   ```bash
+   sudo systemctl enable youtube-downloader
+   ```
+
+5. Start the service now:
+   ```bash
+   sudo systemctl start youtube-downloader
+   ```
+
+6. Check status:
+   ```bash
+   sudo systemctl status youtube-downloader
+   ```
+
+7. View logs:
+   ```bash
+   sudo journalctl -u youtube-downloader -f
+   ```
+
+To uninstall:
+```bash
+sudo systemctl stop youtube-downloader
+sudo systemctl disable youtube-downloader
+sudo rm /etc/systemd/system/youtube-downloader.service
+sudo systemctl daemon-reload
+```
+
+#### macOS (launchd)
+
+1. Edit `deployment/com.youtube-downloader.plist`:
+   - Replace all instances of `/path/to/youtube-downloader` with the full path to the project directory
+
+2. Copy the plist file to the LaunchAgents directory:
+   ```bash
+   cp deployment/com.youtube-downloader.plist ~/Library/LaunchAgents/
+   ```
+
+3. Load the service:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.youtube-downloader.plist
+   ```
+
+4. The service will start automatically on login and system restart
+
+5. Check if it's running:
+   ```bash
+   launchctl list | grep youtube-downloader
+   ```
+
+6. View logs:
+   ```bash
+   tail -f /tmp/youtube-downloader.log
+   tail -f /tmp/youtube-downloader-error.log
+   ```
+
+To uninstall:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.youtube-downloader.plist
+rm ~/Library/LaunchAgents/com.youtube-downloader.plist
+```
+
+#### Verification
+
+After setting up auto-startup, verify the service is running:
+
+1. Reboot your system
+
+2. Check if the service is accessible:
+   ```bash
+   curl http://127.0.0.45:8000/api/health
+   ```
+
+3. You should receive a JSON response with `"status": "ok"`
+
+#### Troubleshooting
+
+**Windows:**
+- Check Windows Event Viewer for errors
+- Ensure Python and dependencies are installed system-wide or paths are correct
+- Verify the working directory in the VBS script or Task Scheduler
+
+**Linux:**
+- Check service status: `sudo systemctl status youtube-downloader`
+- View detailed logs: `sudo journalctl -u youtube-downloader -n 100`
+- Verify file permissions and paths
+- Ensure virtual environment is activated correctly
+
+**macOS:**
+- Check launchd status: `launchctl list | grep youtube-downloader`
+- View logs at `/tmp/youtube-downloader.log` and `/tmp/youtube-downloader-error.log`
+- Verify paths are absolute and correct
+- Check permissions on the plist file
+
+**Security note:** For production deployments, consider running the service as a dedicated system user with limited permissions. Network access is already restricted to localhost (127.0.0.45) by default.
+
+## API reference
+
+### POST `/api/download`
+
+Create a new async download task.
+
+Single-item payload:
+
+```json
+{
+   "video_link": "https://www.youtube.com/watch?v=...",
+   "format": "mp4",
+   "quality": "720",
+   "folder": "C:/Downloads",
+   "name": "optional-file-name"
+}
+```
+
+Batch payload:
+
+```json
+{
+   "videos": [
+      {
+         "video_link": "https://www.youtube.com/watch?v=...",
+         "format": "mp3",
+         "quality": "128",
+         "folder": "C:/Downloads"
+      }
+   ]
+}
+```
+
+Response (`202`):
+
+```json
+{
+   "task_id": "uuid",
+   "status": "queued"
+}
+```
+
+### GET `/api/download/<task_id>`
+
+Returns task status (`queued`, `in_progress`, `completed`, `failed`) and result/error payload.
+
+### GET `/api/health`
+
+Health report including bind/port, task counts, retention settings, and active YouTube client.
+
+## Notes and limitations
+
+- Playlist URLs are intentionally rejected.
+- mp4 uses progressive streams; practical upper limit is usually 720p.
+- Task data is in-memory and cleared on process restart.
+
+## Configuration
+
+Optional environment variables:
+
+- `TASK_RETENTION_MINUTES` (default `30`)
+- `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`)
+
+## Developer
+
+Created by [LorenBll](https://github.com/LorenBll)

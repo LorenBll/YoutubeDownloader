@@ -1,0 +1,21 @@
+[Unit]
+Description=YoutubeDownloader API Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/youtube-downloader
+ExecStart=/path/to/youtube-downloader/.venv/bin/python /path/to/youtube-downloader/src/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
