@@ -23,8 +23,14 @@ ALLOWED_FORMATS = {"mp4", "mp3"}
 PLAYLIST_NOT_SUPPORTED_ERROR = "Playlist download is not supported. Please provide a single video URL."
 
 # In-memory task metadata retention knobs.
-TASK_RETENTION_MINUTES = int(os.getenv("TASK_RETENTION_MINUTES", "30"))
-TASK_CLEANUP_INTERVAL_SECONDS = int(os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60"))
+try:
+    TASK_RETENTION_MINUTES = int(os.getenv("TASK_RETENTION_MINUTES", "30"))
+except (ValueError, TypeError):
+    TASK_RETENTION_MINUTES = 30
+try:
+    TASK_CLEANUP_INTERVAL_SECONDS = int(os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60"))
+except (ValueError, TypeError):
+    TASK_CLEANUP_INTERVAL_SECONDS = 60
 
 
 def _resolve_youtube_client () -> tuple[Any,str]:
@@ -124,6 +130,23 @@ def _build_safe_filename ( file_name:str ) -> str:
     return Path(cleaned).stem or "download"
 
 
+def _is_valid_youtube_url(video_link: str) -> bool:
+
+    """Return True when URL appears to be a valid YouTube URL."""
+    
+    link = video_link.strip().lower()
+    parsed = urlparse(link)
+    
+    # Check for youtube.com or youtu.be domain
+    hostname = parsed.hostname or ""
+    valid_hosts = {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be", "m.youtube.com"}
+    if not any(hostname.endswith(host.replace("www.", "")) for host in valid_hosts):
+        return False
+    
+    # Basic structure check: should have something in path or query
+    return bool(parsed.path.strip("/") or parsed.query)
+
+
 def _is_playlist_url(video_link: str) -> bool:
 
     """Return True when URL appears to target a playlist."""
@@ -146,23 +169,26 @@ def _cleanup_finished_jobs_forever () -> None:
     interval_seconds = max(10, TASK_CLEANUP_INTERVAL_SECONDS)
 
     while True:
-        
-        time.sleep(interval_seconds)
-        now = time.time()
-        removable_task_ids: list[str] = []
+        try:
+            time.sleep(interval_seconds)
+            now = time.time()
+            removable_task_ids: list[str] = []
 
-        with jobs_lock:
-            
-            for task_id, task in jobs.items():
-                if task.get("status") not in {"completed", "failed"}:
-                    continue
+            with jobs_lock:
+                
+                for task_id, task in jobs.items():
+                    if task.get("status") not in {"completed", "failed"}:
+                        continue
 
-                finished_at = task.get("finished_at_unix")
-                if isinstance(finished_at, (int, float)) and (now - finished_at) >= retention_seconds:
-                    removable_task_ids.append(task_id)
+                    finished_at = task.get("finished_at_unix")
+                    if isinstance(finished_at, (int, float)) and (now - finished_at) >= retention_seconds:
+                        removable_task_ids.append(task_id)
 
-            for task_id in removable_task_ids:
-                jobs.pop(task_id, None)
+                for task_id in removable_task_ids:
+                    jobs.pop(task_id, None)
+        except Exception as exc:
+            # Log but don't crash the cleanup thread
+            print(f"[Cleanup Thread Error] {exc}", flush=True)
 
 
 def _ensure_cleanup_thread_started () -> None:
@@ -265,17 +291,32 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
 
     normalized_quality = _normalize_quality(quality, requested_format)
 
-    save_dir = Path(folder).expanduser()
-    save_dir.mkdir(parents=True, exist_ok=True)
+    # Validate and prepare save directory
+    try:
+        save_dir = Path(folder).expanduser()
+        save_dir.mkdir(parents=True, exist_ok=True)
+    except (OSError, PermissionError) as exc:
+        raise ValueError(
+            f"Cannot create or access download folder '{folder}'. "
+            f"Check permissions and disk space. Details: {exc}"
+        ) from exc
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"Invalid folder path '{folder}'. Path contains invalid characters or is malformed."
+        ) from exc
 
     try:
         yt = YouTubeClient(video_link)
-        
-    except HTTPError as exc:
+    except (HTTPError, Exception) as exc:
+        if isinstance(exc, HTTPError):
+            raise ValueError(
+                "YouTube request failed while preparing the download. "
+                "This may be temporary or related to pytube parsing for this video. "
+                f"Upstream error: HTTP {exc.code}."
+            ) from exc
         raise ValueError(
-            "YouTube request failed while preparing the download. "
-            "This may be temporary or related to pytube parsing for this video. "
-            f"Upstream error: HTTP {exc.code}."
+            f"Failed to load YouTube video. The URL may be invalid or the video unavailable. "
+            f"Details: {exc}"
         ) from exc
 
     try:
@@ -310,12 +351,20 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             output_path = Path(
                 stream.download(output_path=str(save_dir), filename=f"{safe_stem}.mp4")
             )
-            
         except HTTPError as exc:
             raise ValueError(
                 "YouTube rejected the mp4 stream download request. "
                 "Try a different video or quality (for example 720p). "
                 f"Upstream error: HTTP {exc.code}."
+            ) from exc
+        except (OSError, PermissionError) as exc:
+            raise ValueError(
+                f"Cannot write mp4 file to '{save_dir}'. Check disk space, permissions, or folder path. "
+                f"Details: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise ValueError(
+                f"Unexpected error downloading mp4 stream: {exc}"
             ) from exc
 
         return {
@@ -338,12 +387,27 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             "Try a different video or quality. "
             f"Upstream error: HTTP {exc.code}."
         ) from exc
+    except (OSError, PermissionError) as exc:
+        raise ValueError(
+            f"Cannot write mp3 file to '{save_dir}'. Check disk space, permissions, or folder path. "
+            f"Details: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise ValueError(
+            f"Unexpected error downloading audio stream: {exc}"
+        ) from exc
 
     target_path = save_dir / f"{safe_stem}.mp3"
     if downloaded_path != target_path and downloaded_path.exists():
-        if target_path.exists():
-            target_path.unlink()
-        downloaded_path.replace(target_path)
+        try:
+            if target_path.exists():
+                target_path.unlink()
+            downloaded_path.replace(target_path)
+        except (OSError, PermissionError) as exc:
+            raise ValueError(
+                f"Cannot move mp3 file to target location. Check permissions and disk space. "
+                f"Details: {exc}"
+            ) from exc
 
     return {
         "name": safe_stem,
@@ -405,6 +469,14 @@ def _validate_payload ( payload:Any ) -> tuple[ dict[str,Any] | None , Any | Non
                 continue
 
             video_link = str(video_payload.get("video_link", "")).strip()
+            if not _is_valid_youtube_url(video_link):
+                video_errors.append(
+                    {
+                        "index": index,
+                        "error": "video_link must be a valid YouTube URL (youtube.com or youtu.be).",
+                    }
+                )
+                continue
             if _is_playlist_url(video_link):
                 video_errors.append(
                     {
@@ -449,6 +521,8 @@ def _validate_payload ( payload:Any ) -> tuple[ dict[str,Any] | None , Any | Non
         return None, {"error": "format must be either 'mp4' or 'mp3'"}, 400
 
     video_link = str(payload.get("video_link", "")).strip()
+    if not _is_valid_youtube_url(video_link):
+        return None, {"error": "video_link must be a valid YouTube URL (youtube.com or youtu.be)."}, 400
     if _is_playlist_url(video_link):
         return None, {"error": PLAYLIST_NOT_SUPPORTED_ERROR}, 400
 
@@ -548,13 +622,24 @@ def download () -> tuple[Any,int]:
             "updated_at": now,
         }
 
-    download_thread = Thread(
-        target=_download_worker,
-        args=(task_id, validated_payload),
-        name=f"youtube-download-worker-{task_id}",
-        daemon=False,
-    )
-    download_thread.start()
+    try:
+        download_thread = Thread(
+            target=_download_worker,
+            args=(task_id, validated_payload),
+            name=f"youtube-download-worker-{task_id}",
+            daemon=False,
+        )
+        download_thread.start()
+    except Exception as exc:
+        with jobs_lock:
+            jobs[task_id]["status"] = "failed"
+            jobs[task_id]["error"] = f"Failed to start download worker: {exc}"
+            jobs[task_id]["updated_at"] = _utc_iso()
+            jobs[task_id]["finished_at_unix"] = time.time()
+        return jsonify({
+            "error": "Could not start download worker. The server may be under heavy load.",
+            "task_id": task_id
+        }), 500
 
     response_body: dict[str, Any] = {
         "task_id": task_id,
@@ -651,3 +736,19 @@ if __name__ == "__main__":
         print("\n\n" + "="*50)
         print("  Server Stopped")
         print("="*50 + "\n")
+    except OSError as exc:
+        if "Address already in use" in str(exc):
+            print(
+                f"\n❌ ERROR: Port {SERVICE_PORT} is already in use.\n"
+                f"   Either stop the other process, or set a different port\n"
+                f"   by running: export FLASK_PORT=8001\n"
+            )
+        elif "Permission denied" in str(exc):
+            print(
+                f"\n❌ ERROR: Permission denied to bind to port {SERVICE_PORT}.\n"
+                f"   On Linux/macOS, use a port >= 1024 or run with sudo.\n"
+            )
+        else:
+            print(f"\n❌ ERROR: Network binding failed: {exc}\n")
+    except Exception as exc:
+        print(f"\n❌ ERROR: Server startup failed: {exc}\n")

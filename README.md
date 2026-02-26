@@ -32,8 +32,10 @@ Users can interact with this service in several ways:
 - Async download jobs with task IDs
 - Single-video support for mp4 and mp3
 - Batch request support via `videos` array
-- Input validation with actionable error messages
+- Comprehensive input validation with actionable error messages
+- YouTube URL format validation (youtube.com/youtu.be only)
 - Playlist URL rejection guard (single videos only)
+- Disk space and permission error detection with helpful feedback
 - Health endpoint with queue/runtime metrics
 - In-memory job retention with automatic cleanup worker
 - Works with `pytubefix` first, falls back to `pytube`
@@ -360,8 +362,28 @@ Health report including bind/port, task counts, retention settings, and active Y
 
 Optional environment variables:
 
-- `TASK_RETENTION_MINUTES` (default `30`)
-- `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`)
+- `TASK_RETENTION_MINUTES` (default `30`) - Completed/failed task retention time in minutes. Invalid values fall back to default.
+- `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`) - Background cleanup worker interval in seconds. Invalid values fall back to default.
+
+### Common startup errors
+
+**"Address already in use" on port 8000:**
+- Another instance is running, or port 8000 is in use by another service
+- Stop the conflicting process or change the code to use a different port
+
+**"Permission denied" error:**
+- On Linux/macOS, ports below 1024 require root privileges
+- Use a port >= 1024 or run with `sudo` if necessary
+
+**"Cannot create or access download folder" errors:**
+- The specified download folder doesn't have write permissions
+- Ensure the folder exists and your user account has write access
+- Check available disk space; downloads may fail if disk is full
+
+**Download fails with "Cannot write file" error:**
+- Verify the output folder path is valid and accessible
+- Check disk space: YouTube videos require significant temporary and final space
+- On Windows, ensure the path doesn't exceed 260 characters or contains invalid characters
 
 ## Developer
 
