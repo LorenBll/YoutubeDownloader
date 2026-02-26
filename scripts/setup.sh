@@ -9,8 +9,6 @@
 # - Installs all required dependencies
 # - Optionally configures LaunchAgent for autostart
 
-set -e
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,9 +17,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo ""
-echo "========================================"
-echo "  YoutubeDownloader - macOS Setup"
-echo "========================================"
+echo "==============================================="
+echo "  ${GREEN}YoutubeDownloader - macOS Setup${NC}"
+echo "==============================================="
 echo ""
 
 # Change to project root directory
@@ -67,7 +65,9 @@ echo ""
 # Create virtual environment if it doesn't exist
 if [ -d ".venv" ]; then
   echo "[*] Virtual environment already exists."
-  read -p "Do you want to recreate it? (y/N): " -n 1 -r
+  echo ""
+  echo "Do you want to recreate it? (y/N):"
+  read -n 1 -r
   echo ""
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "[*] Removing existing virtual environment..."
@@ -105,7 +105,7 @@ echo ""
 
 # Upgrade pip
 echo "[*] Upgrading pip..."
-python -m pip install --upgrade pip --quiet
+python -m pip install --upgrade pip
 if [ $? -ne 0 ]; then
   echo -e "${YELLOW}[WARNING]${NC} Failed to upgrade pip, continuing anyway..."
 else
@@ -155,19 +155,20 @@ if [ ! -f "src/main.py" ]; then
   echo ""
 fi
 
-echo "========================================"
-echo "  Setup Complete!"
-echo "========================================"
+echo ""
+echo "==============================================="
+echo "  ${GREEN}Setup Complete!${NC}"
+echo "==============================================="
 echo ""
 echo "You can now run the YoutubeDownloader using:"
-echo "  ./scripts/run.sh"
+echo "  ${BLUE}./scripts/run.sh${NC}"
 echo ""
 echo "To run in verbose mode (see output):"
-echo "  ./scripts/run.sh --verbose"
+echo "  ${BLUE}./scripts/run.sh --verbose${NC}"
 echo ""
 
-# Ask about autostart configuration
-read -p "Do you want to configure autostart at login? (y/N): " -n 1 -r
+echo "Do you want to configure autostart at login? (y/N):"
+read -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo ""

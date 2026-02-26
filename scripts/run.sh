@@ -1,19 +1,25 @@
 #!/usr/bin/env sh
-set -e
 
 VERBOSE=0
 if [ "$1" = "--verbose" ]; then
   VERBOSE=1
 fi
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")"; pwd)
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 
 if [ $VERBOSE -eq 1 ]; then
   echo ""
-  echo "========================================"
-  echo "  YoutubeDownloader Setup"
-  echo "========================================"
+  echo "==============================================="
+  echo "  ${GREEN}YoutubeDownloader - Starting Service${NC}"
+  echo "==============================================="
   echo ""
 fi
 
@@ -64,12 +70,18 @@ fi
 
 # Run the application
 if [ $VERBOSE -eq 1 ]; then
-  echo "========================================"
-  echo "Starting YoutubeDownloader API..."
-  echo "========================================"
+  echo ""
+  echo "==============================================="
+  echo ""
+  echo "  Starting YoutubeDownloader API..."
+  echo ""
+  echo "==============================================="
   echo ""
   python src/main.py
 else
   nohup python src/main.py >/dev/null 2>&1 &
-  echo "Service started in background. Use './run.sh --verbose' to see output."
+  echo ""
+  echo -e "${GREEN}[*]${NC} YoutubeDownloader started in background"
+  echo "    Use ${BLUE}'./run.sh --verbose'${NC} to see output"
+  echo ""
 fi

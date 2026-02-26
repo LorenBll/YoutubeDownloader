@@ -11,9 +11,9 @@ REM - Installs all required dependencies
 REM - Optionally configures autostart
 
 echo.
-echo ========================================
-echo   YoutubeDownloader - Windows Setup
-echo ========================================
+echo ===============================================
+echo   ^^ YoutubeDownloader - Windows Setup
+echo ===============================================
 echo.
 
 REM Change to project root directory
@@ -48,7 +48,9 @@ echo.
 REM Create virtual environment if it doesn't exist
 if exist ".venv" (
   echo [*] Virtual environment already exists.
-  choice /C YN /M "Do you want to recreate it"
+  echo.
+  echo Do you want to recreate it?
+  choice /C YN
   if errorlevel 2 goto skip_venv_creation
   if errorlevel 1 (
     echo [*] Removing existing virtual environment...
@@ -117,15 +119,10 @@ echo.
 
 REM Verify installation
 echo [*] Verifying installation...
-python -c "import flask; import pytube" 2>nul
+python -m pip show flask >nul 2>&1
 if errorlevel 1 (
-  python -c "import flask; import pytubefix" 2>nul
-  if errorlevel 1 (
-    echo [WARNING] Could not verify all required packages.
-    echo The installation may be incomplete.
-  ) else (
-    echo [OK] Installation verified (using pytubefix).
-  )
+  echo [WARNING] Could not verify all required packages.
+  echo The installation may be incomplete.
 ) else (
   echo [OK] Installation verified.
 )
@@ -134,22 +131,22 @@ echo.
 REM Test if main.py exists
 if not exist "src\main.py" (
   echo [WARNING] src\main.py not found. Project may be incomplete.
-  echo.
 )
 
-echo ========================================
+echo.
+echo ===============================================
 echo   Setup Complete!
-echo ========================================
+echo ===============================================
 echo.
 echo You can now run the YoutubeDownloader using:
 echo   scripts\run.bat
 echo.
-echo To run in verbose mode (see output):
+echo To run in verbose mode ^(see output^):
 echo   scripts\run.bat --verbose
 echo.
 
-REM Ask about autostart configuration
-choice /C YN /M "Do you want to configure autostart at Windows login"
+echo Do you want to configure autostart at Windows login?
+choice /C YN
 if errorlevel 2 goto skip_autostart
 if errorlevel 1 goto configure_autostart
 

@@ -6,13 +6,15 @@ if "%1"=="--verbose" (
   set VERBOSE=1
 )
 
-pushd "%~dp0"
+REM Navigate to project root (parent of scripts directory)
+pushd "%~dp0\.."
+set PROJECT_ROOT=%CD%
 
 if %VERBOSE% equ 1 (
   echo.
-  echo ========================================
-  echo   YoutubeDownloader Setup
-  echo ========================================
+  echo ===============================================
+  echo   ^^ YoutubeDownloader - Starting Service
+  echo ===============================================
   echo.
 )
 
@@ -47,14 +49,14 @@ if %VERBOSE% equ 1 echo [OK] Virtual environment activated.
 
 REM Install/upgrade dependencies
 if %VERBOSE% equ 1 echo [*] Installing dependencies...
-python -m pip install --quiet --upgrade pip
+python -m pip install --quiet --upgrade pip >nul 2>&1
 if errorlevel 1 (
   if %VERBOSE% equ 1 echo [ERROR] Failed to upgrade pip.
   popd
   exit /b 1
 )
 
-python -m pip install --quiet -r requirements.txt
+python -m pip install --quiet -r requirements.txt >nul 2>&1
 if errorlevel 1 (
   if %VERBOSE% equ 1 echo [ERROR] Failed to install requirements.
   popd
@@ -64,20 +66,24 @@ if %VERBOSE% equ 1 echo [OK] Dependencies installed.
 
 if %VERBOSE% equ 1 (
   echo.
-  echo ========================================
-  echo Starting YoutubeDownloader API...
-  echo ========================================
+  echo ===============================================
+  echo.   Starting YoutubeDownloader API...
+  echo.
   python src/main.py
 ) else (
   start /B python src/main.py >nul 2>&1
   if errorlevel 1 (
-    echo [ERROR] Failed to start YoutubeDownloader API.
+    echo.
+    echo [!] Failed to start YoutubeDownloader API.
+    echo.
     popd
     exit /b 1
   )
-  echo Service started in background. Use 'run.bat --verbose' to see output.
+  echo.
+  echo ^[*^] YoutubeDownloader started in background
+  echo     Use 'run.bat --verbose' to see output
+  echo.
 )
-python src\main.py
 
 popd
 endlocal

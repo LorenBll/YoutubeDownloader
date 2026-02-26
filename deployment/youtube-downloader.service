@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=YOUR_USERNAME
 WorkingDirectory=/path/to/youtube-downloader
+ExecStartPre=/path/to/youtube-downloader/scripts/setup.sh
 ExecStart=/path/to/youtube-downloader/.venv/bin/python /path/to/youtube-downloader/src/main.py
 Restart=on-failure
 RestartSec=10
