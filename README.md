@@ -137,7 +137,7 @@ If you prefer to manage the environment yourself:
     python src/main.py
     ```
 
-The API binds to `127.0.0.45:8000` by default.
+The API binds to `127.0.0.1:49153` by default.
 
 ## Background service mode
 
@@ -276,7 +276,7 @@ After setting up auto-startup, verify the service is running:
 
 2. Check if the service is accessible:
    ```bash
-   curl http://127.0.0.45:8000/api/health
+   curl http://127.0.0.1:49153/api/health
    ```
 
 3. You should receive a JSON response with `"status": "ok"`

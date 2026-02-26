@@ -17,8 +17,8 @@ from uuid import uuid4
 from flask import Flask, jsonify, request
 
 # Local-only service bind details.
-SERVICE_HOST = "127.0.0.45"
-SERVICE_PORT = 8000
+SERVICE_HOST = "127.0.0.1"
+SERVICE_PORT = 49153
 
 # API contract fields (mandatory).
 REQUIRED_FIELDS = ["video_link", "format", "quality", "folder"]
