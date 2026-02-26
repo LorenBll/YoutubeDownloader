@@ -133,6 +133,22 @@ def _build_safe_filename ( file_name:str ) -> str:
     return Path(cleaned).stem or "download"
 
 
+def _resolve_unique_path ( directory:Path , stem:str , suffix:str ) -> Path:
+
+    """Return a unique path by appending a numeric suffix when needed."""
+
+    candidate = directory / f"{stem}{suffix}"
+    if not candidate.exists():
+        return candidate
+
+    counter = 1
+    while True:
+        candidate = directory / f"{stem} ({counter}){suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def _is_valid_youtube_url(video_link: str) -> bool:
 
     """Return True when URL appears to be a valid YouTube URL."""
@@ -486,8 +502,9 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
 
         if not use_adaptive:
             try:
+                output_path = _resolve_unique_path(save_dir, safe_stem, ".mp4")
                 output_path = Path(
-                    stream.download(output_path=str(save_dir), filename=f"{safe_stem}.mp4")
+                    stream.download(output_path=str(save_dir), filename=output_path.name)
                 )
             except HTTPError as exc:
                 raise ValueError(
@@ -506,7 +523,7 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
                 ) from exc
 
             return {
-                "name": safe_stem,
+                "name": output_path.stem,
                 "format": "mp4",
                 "requested_quality": normalized_quality,
                 "actual_quality": f"{selected_height}p",
@@ -526,9 +543,7 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
                 audio_path = Path(
                     audio_stream.download(output_path=str(temp_dir_path), filename="audio.m4a")
                 )
-                output_path = save_dir / f"{safe_stem}.mp4"
-                if output_path.exists():
-                    output_path.unlink()
+                output_path = _resolve_unique_path(save_dir, safe_stem, ".mp4")
                 _merge_av_with_ffmpeg(ffmpeg_path, video_path, audio_path, output_path)
         except HTTPError as exc:
             raise ValueError(
@@ -547,19 +562,20 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             ) from exc
 
         return {
-            "name": safe_stem,
+            "name": output_path.stem,
             "format": "mp4",
             "requested_quality": normalized_quality,
             "actual_quality": f"{selected_height}p",
-            "save_path": str(save_dir / f"{safe_stem}.mp4"),
+            "save_path": str(output_path),
             "merge": "ffmpeg",
         }
 
     stream = _select_audio_stream(yt, normalized_quality)
 
     try:
+        target_path = _resolve_unique_path(save_dir, safe_stem, ".mp3")
         downloaded_path = Path(
-            stream.download(output_path=str(save_dir), filename=f"{safe_stem}.mp3")
+            stream.download(output_path=str(save_dir), filename=target_path.name)
         )
     except HTTPError as exc:
         raise ValueError(
@@ -577,11 +593,8 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             f"Unexpected error downloading audio stream: {exc}"
         ) from exc
 
-    target_path = save_dir / f"{safe_stem}.mp3"
     if downloaded_path != target_path and downloaded_path.exists():
         try:
-            if target_path.exists():
-                target_path.unlink()
             downloaded_path.replace(target_path)
         except (OSError, PermissionError) as exc:
             raise ValueError(
@@ -590,7 +603,7 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             ) from exc
 
     return {
-        "name": safe_stem,
+        "name": target_path.stem,
         "format": "mp3",
         "requested_quality": normalized_quality,
         "actual_quality": str(getattr(stream, "abr", normalized_quality) or normalized_quality),
