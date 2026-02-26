@@ -300,7 +300,7 @@ After setting up auto-startup, verify the service is running:
 - Verify paths are absolute and correct
 - Check permissions on the plist file
 
-**Security note:** For production deployments, consider running the service as a dedicated system user with limited permissions. Network access is already restricted to localhost (127.0.0.45) by default.
+**Security note:** For production deployments, consider running the service as a dedicated system user with limited permissions. Network access is already restricted to localhost (127.0.0.1) by default.
 
 ## API reference
 
