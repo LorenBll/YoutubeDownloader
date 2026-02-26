@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import importlib
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -251,6 +254,142 @@ def _select_progressive_mp4_stream ( yt:Any , normalized_quality:str ) -> tuple[
     return next(((h, s) for h, s in available if h <= requested_height), available[-1])
 
 
+def _select_adaptive_mp4_stream ( yt:Any , normalized_quality:str ) -> tuple[int,Any]:
+
+    """Select best adaptive mp4 video-only stream.
+
+    The requested quality is treated as a target maximum.
+    - If exact target exists, it is selected.
+    - Otherwise select the closest available adaptive quality below target.
+    - If nothing is below target, use the smallest available adaptive quality.
+    """
+
+    requested_height = _resolution_to_int(normalized_quality)
+    if requested_height is None:
+        raise ValueError("For mp4, quality must be a value like '1080p' (or numeric like '1080').")
+
+    try:
+        candidate_streams = list(
+            yt.streams.filter(adaptive=True, only_video=True, file_extension="mp4")
+            .order_by("resolution")
+            .desc()
+        )
+
+    except HTTPError as exc:
+        raise ValueError(
+            "YouTube request failed while fetching available adaptive mp4 streams. "
+            "Try again later or test another video. "
+            f"Upstream error: HTTP {exc.code}."
+        ) from exc
+
+    available: list[tuple[int, Any]] = []
+    for candidate in candidate_streams:
+        height = _resolution_to_int(getattr(candidate, "resolution", None))
+        if height is not None:
+            available.append((height, candidate))
+
+    if not available:
+        raise ValueError("No adaptive mp4 video streams are available for this video.")
+
+    available.sort(key=lambda item: item[0], reverse=True)
+    return next(((h, s) for h, s in available if h <= requested_height), available[-1])
+
+
+def _select_best_audio_stream_for_mp4 ( yt:Any ) -> Any:
+
+    """Select highest bitrate audio stream for mp4 container."""
+
+    try:
+        stream = (
+            yt.streams.filter(only_audio=True, mime_type="audio/mp4")
+            .order_by("abr")
+            .desc()
+            .first()
+        )
+        if stream is None:
+            stream = (
+                yt.streams.filter(only_audio=True)
+                .order_by("abr")
+                .desc()
+                .first()
+            )
+
+    except HTTPError as exc:
+        raise ValueError(
+            "YouTube request failed while fetching available audio streams. "
+            "Try again later or test another video. "
+            f"Upstream error: HTTP {exc.code}."
+        ) from exc
+
+    if stream is None:
+        raise ValueError("No audio stream found for this video.")
+
+    return stream
+
+
+def _resolve_ffmpeg_path () -> str:
+
+    """Return ffmpeg executable path or raise a friendly error."""
+
+    env_path = os.getenv("FFMPEG_PATH")
+    if env_path:
+        if Path(env_path).exists():
+            return env_path
+        raise ValueError(
+            f"FFMPEG_PATH was set to '{env_path}' but the file does not exist. "
+            "Update FFMPEG_PATH or install ffmpeg."
+        )
+
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    raise ValueError(
+        "ffmpeg is required to merge high-quality mp4 streams, but it was not found. "
+        "Install ffmpeg or set FFMPEG_PATH to the ffmpeg executable."
+    )
+
+
+def _merge_av_with_ffmpeg ( ffmpeg_path:str , video_path:Path , audio_path:Path , output_path:Path ) -> None:
+
+    """Merge video-only and audio-only streams into a single mp4 file."""
+
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(video_path),
+        "-i",
+        str(audio_path),
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "ffmpeg executable could not be found. "
+            "Install ffmpeg or set FFMPEG_PATH."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else ""
+        message = "ffmpeg failed while merging audio and video streams."
+        if stderr:
+            message += f" Details: {stderr}"
+        raise ValueError(message) from exc
+
+
 def _select_audio_stream ( yt:Any , normalized_quality:str ) -> Any:
     
     """Select audio-only stream matching requested bitrate."""
@@ -333,28 +472,68 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
     safe_stem = _build_safe_filename(save_name)
 
     if requested_format == "mp4":
-        
-        # Keep this explicit guard since this backend intentionally supports progressive mp4 streams only.
-        
-        if normalized_quality.endswith("p"):
-            quality_number_text = normalized_quality[:-1]
-            if quality_number_text.isdigit() and int(quality_number_text) > 720:
-                raise ValueError(
-                    "Requested mp4 quality is above 720p. This service currently uses progressive mp4 "
-                    "(audio+video in one stream), and those streams are typically available up to 720p. "
-                    "Try 720p, or use mp3 for audio-only downloads."
-                )
 
-        selected_height, stream = _select_progressive_mp4_stream(yt, normalized_quality)
+        requested_height = _resolution_to_int(normalized_quality)
+        if requested_height is None:
+            raise ValueError("For mp4, quality must be a value like '720p' (or numeric like '720').")
+
+        use_adaptive = requested_height > 720
+        if not use_adaptive:
+            try:
+                selected_height, stream = _select_progressive_mp4_stream(yt, normalized_quality)
+            except ValueError:
+                use_adaptive = True
+
+        if not use_adaptive:
+            try:
+                output_path = Path(
+                    stream.download(output_path=str(save_dir), filename=f"{safe_stem}.mp4")
+                )
+            except HTTPError as exc:
+                raise ValueError(
+                    "YouTube rejected the mp4 stream download request. "
+                    "Try a different video or quality (for example 720p). "
+                    f"Upstream error: HTTP {exc.code}."
+                ) from exc
+            except (OSError, PermissionError) as exc:
+                raise ValueError(
+                    f"Cannot write mp4 file to '{save_dir}'. Check disk space, permissions, or folder path. "
+                    f"Details: {exc}"
+                ) from exc
+            except Exception as exc:
+                raise ValueError(
+                    f"Unexpected error downloading mp4 stream: {exc}"
+                ) from exc
+
+            return {
+                "name": safe_stem,
+                "format": "mp4",
+                "requested_quality": normalized_quality,
+                "actual_quality": f"{selected_height}p",
+                "save_path": str(output_path),
+            }
+
+        ffmpeg_path = _resolve_ffmpeg_path()
+        selected_height, video_stream = _select_adaptive_mp4_stream(yt, normalized_quality)
+        audio_stream = _select_best_audio_stream_for_mp4(yt)
 
         try:
-            output_path = Path(
-                stream.download(output_path=str(save_dir), filename=f"{safe_stem}.mp4")
-            )
+            with tempfile.TemporaryDirectory(prefix="yt-downloader-") as temp_dir:
+                temp_dir_path = Path(temp_dir)
+                video_path = Path(
+                    video_stream.download(output_path=str(temp_dir_path), filename="video.mp4")
+                )
+                audio_path = Path(
+                    audio_stream.download(output_path=str(temp_dir_path), filename="audio.m4a")
+                )
+                output_path = save_dir / f"{safe_stem}.mp4"
+                if output_path.exists():
+                    output_path.unlink()
+                _merge_av_with_ffmpeg(ffmpeg_path, video_path, audio_path, output_path)
         except HTTPError as exc:
             raise ValueError(
-                "YouTube rejected the mp4 stream download request. "
-                "Try a different video or quality (for example 720p). "
+                "YouTube rejected the high-quality mp4 stream download request. "
+                "Try a different video or quality. "
                 f"Upstream error: HTTP {exc.code}."
             ) from exc
         except (OSError, PermissionError) as exc:
@@ -364,7 +543,7 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             ) from exc
         except Exception as exc:
             raise ValueError(
-                f"Unexpected error downloading mp4 stream: {exc}"
+                f"Unexpected error downloading high-quality mp4 stream: {exc}"
             ) from exc
 
         return {
@@ -372,7 +551,8 @@ def _download_with_pytube ( payload:dict[str,Any] ) -> dict[str,Any]:
             "format": "mp4",
             "requested_quality": normalized_quality,
             "actual_quality": f"{selected_height}p",
-            "save_path": str(output_path),
+            "save_path": str(save_dir / f"{safe_stem}.mp4"),
+            "merge": "ffmpeg",
         }
 
     stream = _select_audio_stream(yt, normalized_quality)

@@ -355,8 +355,37 @@ Health report including bind/port, task counts, retention settings, and active Y
 ## Notes and limitations
 
 - Playlist URLs are intentionally rejected.
-- mp4 uses progressive streams; practical upper limit is usually 720p.
+- mp4 uses progressive streams up to 720p. Higher qualities use separate video/audio streams that are merged with ffmpeg.
 - Task data is in-memory and cleared on process restart.
+
+### Install ffmpeg
+
+High-quality mp4 downloads (above 720p) require ffmpeg to merge video and audio streams.
+
+**Windows**
+
+1. Download the “Release full” build from https://www.gyan.dev/ffmpeg/builds/
+2. Extract the zip (for example: `C:\ffmpeg`)
+3. Add `C:\ffmpeg\bin` to your PATH
+4. Open a new terminal and run:
+   ```bash
+   ffmpeg -version
+   ```
+
+**macOS (Homebrew)**
+
+```bash
+brew install ffmpeg
+ffmpeg -version
+```
+
+**Linux (Ubuntu/Debian)**
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
+ffmpeg -version
+```
 
 ## Configuration
 
@@ -364,6 +393,7 @@ Optional environment variables:
 
 - `TASK_RETENTION_MINUTES` (default `30`) - Completed/failed task retention time in minutes. Invalid values fall back to default.
 - `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`) - Background cleanup worker interval in seconds. Invalid values fall back to default.
+- `FFMPEG_PATH` (optional) - Full path to the ffmpeg executable when it is not available on PATH.
 
 ### Common startup errors
 
