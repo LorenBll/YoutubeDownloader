@@ -24,7 +24,7 @@ Many download scripts are one-off and hard to integrate with apps. This project 
 Users can interact with this service in several ways:
 
 - **API directly:** Call HTTP endpoints from any language or application
-- **[YoutubeDownloader-Client](https://github.com/LorenBll/youtube-downloader-client):** Dedicated terminal client for easy command-line batch downloads and task management
+- **[YoutubeDownloader-Client](https://github.com/LorenBll/YoutubeDownloader-Client):** Dedicated terminal client for easy command-line batch downloads and task management
 - **Custom integrations:** Build your own tools using the REST API
 
 ## Features
