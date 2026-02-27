@@ -1,7 +1,12 @@
 """YouTube Downloader API Service
 
 A Flask-based REST API service for downloading YouTube videos and audio.
-Supports multiple quality options, batch downloads, and various authentication modes.
+This service provides:
+- Multiple authentication modes (private, unprivate, public)
+- Asynchronous download task processing with progress tracking
+- Support for MP4 (video) and MP3 (audio) formats
+- Batch download support
+- High-quality stream selection (up to 4K)
 """
 
 from __future__ import annotations
@@ -23,34 +28,6 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
-
-
-# ============================================================================
-# CONFIGURATION AND GLOBAL VARIABLES
-# ============================================================================
-
-# Service configuration (loaded from configuration.json at startup)
-SERVICE_MODE = None  # One of: 'private', 'unprivate', 'public'
-SERVICE_HOST = None  # IP address to bind to (e.g., '127.0.0.1' or '0.0.0.0')
-SERVICE_PORT = None  # Port number to listen on (e.g., 49153)
-API_KEYLIST = []     # List of valid API keys (used only in 'unprivate' mode)
-
-# API request validation constants
-REQUIRED_FIELDS = ["video_link", "format", "quality", "folder"]  # Mandatory fields in download requests
-ALLOWED_FORMATS = {"mp4", "mp3"}  # Supported output formats
-PLAYLIST_NOT_SUPPORTED_ERROR = "Playlist download is not supported. Please provide a single video URL."
-
-# Task retention settings (configurable via environment variables)
-# These control how long completed tasks are kept in memory before automatic cleanup
-try:
-    TASK_RETENTION_MINUTES = int(os.getenv("TASK_RETENTION_MINUTES", "30"))
-except (ValueError, TypeError):
-    TASK_RETENTION_MINUTES = 30  # Default: keep completed tasks for 30 minutes
-
-try:
-    TASK_CLEANUP_INTERVAL_SECONDS = int(os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60"))
-except (ValueError, TypeError):
-    TASK_CLEANUP_INTERVAL_SECONDS = 60  # Default: check for old tasks every 60 seconds
 
 
 # ============================================================================
@@ -86,6 +63,38 @@ def _resolve_youtube_client() -> tuple[Any, str]:
         "No supported YouTube client found. Install pytubefix or pytube using: "
         "pip install pytubefix"
     )
+
+
+# Initialize YouTube client (detect which library is installed)
+YouTubeClient, YOUTUBE_CLIENT_NAME = _resolve_youtube_client()
+
+
+# ============================================================================
+# CONFIGURATION AND GLOBAL VARIABLES
+# ============================================================================
+
+# Service configuration (loaded from configuration.json at startup)
+SERVICE_MODE = None  # One of: 'private', 'unprivate', 'public'
+SERVICE_HOST = None  # IP address to bind to (e.g., '127.0.0.1' or '0.0.0.0')
+SERVICE_PORT = None  # Port number to listen on (e.g., 49153)
+API_KEYLIST = []     # List of valid API keys (used only in 'unprivate' mode)
+
+# API request validation constants
+REQUIRED_FIELDS = ["video_link", "format", "quality", "folder"]  # Mandatory fields in download requests
+ALLOWED_FORMATS = {"mp4", "mp3"}  # Supported output formats
+PLAYLIST_NOT_SUPPORTED_ERROR = "Playlist download is not supported. Please provide a single video URL."
+
+# Task retention settings (configurable via environment variables)
+# These control how long completed tasks are kept in memory before automatic cleanup
+try:
+    TASK_RETENTION_MINUTES = int(os.getenv("TASK_RETENTION_MINUTES", "30"))
+except (ValueError, TypeError):
+    TASK_RETENTION_MINUTES = 30  # Default: keep completed tasks for 30 minutes
+
+try:
+    TASK_CLEANUP_INTERVAL_SECONDS = int(os.getenv("TASK_CLEANUP_INTERVAL_SECONDS", "60"))
+except (ValueError, TypeError):
+    TASK_CLEANUP_INTERVAL_SECONDS = 60  # Default: check for old tasks every 60 seconds
 
 
 
@@ -235,9 +244,6 @@ def _require_api_key(f):
     return decorated_function
 
 
-# Initialize YouTube client (detect which library is installed)
-YouTubeClient, YOUTUBE_CLIENT_NAME = _resolve_youtube_client()
-
 # Initialize Flask application
 app = Flask(__name__)
 
@@ -258,9 +264,8 @@ cleanup_thread_started = False  # Flag to track if cleanup thread is running
 
 
 # ============================================================================
-# UTILITY FUNCTIONS - Time and Formatting
+# UTILITY FUNCTIONS
 # ============================================================================
-
 
 
 def _utc_iso() -> str:
@@ -337,13 +342,8 @@ def _normalize_quality(quality: str, requested_format: str) -> str:
     return quality.strip()
 
 
-
-# ============================================================================
-# UTILITY FUNCTIONS - Filename and Path Handling
-# ============================================================================
-
 def _build_safe_filename(file_name: str) -> str:
-    """Sanitize and validate filename for safe filesystem operations.
+    r"""Sanitize and validate filename for safe filesystem operations.
     
     Removes potentially dangerous characters:
     - Path separators (/ and \) are replaced with underscores
@@ -403,11 +403,6 @@ def _resolve_unique_path(directory: Path, stem: str, suffix: str) -> Path:
         if not candidate.exists():
             return candidate
         counter += 1
-
-
-# ============================================================================
-# UTILITY FUNCTIONS - URL Validation
-# ============================================================================
 
 
 def _is_valid_youtube_url(video_link: str) -> bool:
@@ -539,7 +534,7 @@ def _ensure_cleanup_thread_started() -> None:
 
 
 # ============================================================================
-# YOUTUBE STREAM SELECTION - Progressive MP4 (Video + Audio Combined)
+# YOUTUBE STREAM SELECTION AND DOWNLOADING
 # ============================================================================
 
 
@@ -604,11 +599,6 @@ def _select_progressive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[in
     return next(((h, s) for h, s in available if h <= requested_height), available[-1])
 
 
-# ============================================================================
-# YOUTUBE STREAM SELECTION - Adaptive MP4 (High Quality Video Only)
-# ============================================================================
-
-
 def _select_adaptive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[int, Any]:
     """Select the best adaptive MP4 video-only stream for high quality downloads.
     
@@ -669,11 +659,6 @@ def _select_adaptive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[int, 
     return next(((h, s) for h, s in available if h <= requested_height), available[-1])
 
 
-# ============================================================================
-# YOUTUBE STREAM SELECTION - Audio for MP4 Merging
-# ============================================================================
-
-
 def _select_best_audio_stream_for_mp4(yt: Any) -> Any:
     """Select the highest quality audio stream for merging with adaptive video.
     
@@ -722,11 +707,6 @@ def _select_best_audio_stream_for_mp4(yt: Any) -> Any:
         raise ValueError("No audio stream found for this video.")
 
     return stream
-
-
-# ============================================================================
-# FFMPEG INTEGRATION - Audio/Video Merging
-# ============================================================================
 
 
 def _resolve_ffmpeg_path() -> str:
@@ -822,11 +802,6 @@ def _merge_av_with_ffmpeg(ffmpeg_path: str, video_path: Path, audio_path: Path, 
         raise ValueError(message) from exc
 
 
-# ============================================================================
-# YOUTUBE STREAM SELECTION - Audio for MP3 Downloads
-# ============================================================================
-
-
 def _select_audio_stream(yt: Any, normalized_quality: str) -> Any:
     """Select audio-only stream for MP3 downloads.
     
@@ -866,7 +841,7 @@ def _select_audio_stream(yt: Any, normalized_quality: str) -> Any:
 
 
 # ============================================================================
-# MAIN DOWNLOAD FUNCTION
+# DOWNLOAD TASK PROCESSING
 # ============================================================================
 
 
@@ -1110,12 +1085,6 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
         "save_path": str(target_path),
     }
 
-
-# ============================================================================
-# REQUEST VALIDATION
-# ============================================================================
-
-
 def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, int]:
     """Validate and normalize request payload for download endpoints.
     
@@ -1261,11 +1230,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
 
     # Payload is valid
     return payload, None, 200
-
-
-# ============================================================================
-# BACKGROUND DOWNLOAD WORKER
-# ============================================================================
 
 
 def _download_worker(task_id: str, payload: dict[str, Any]) -> None:

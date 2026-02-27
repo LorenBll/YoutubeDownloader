@@ -7,12 +7,12 @@
     
     <key>ProgramArguments</key>
     <array>
-        <string>/path/to/youtube-downloader/.venv/bin/python</string>
-        <string>/path/to/youtube-downloader/src/main.py</string>
+        <string>/path/to/YoutubeDownloader/.venv/bin/python</string>
+        <string>/path/to/YoutubeDownloader/src/main.py</string>
     </array>
     
     <key>WorkingDirectory</key>
-    <string>/path/to/youtube-downloader</string>
+    <string>/path/to/YoutubeDownloader</string>
     
     <key>RunAtLoad</key>
     <true/>
@@ -24,6 +24,14 @@
     <string>/tmp/youtube-downloader.log</string>
     
     <key>StandardErrorPath</key>
-    <string>/tmp/youtube-downloader-error.log</string>
+    <string>/tmp/youtube-downloader.error.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TASK_RETENTION_MINUTES</key>
+        <string>30</string>
+        <key>TASK_CLEANUP_INTERVAL_SECONDS</key>
+        <string>60</string>
+    </dict>
 </dict>
 </plist>

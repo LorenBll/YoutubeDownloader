@@ -1,38 +1,29 @@
-#!/usr/bin/env sh
+#!/bin/bash
+
+# YouTube Downloader - Run Script
+# This script sets up the environment and starts the service
 
 VERBOSE=0
 if [ "$1" = "--verbose" ]; then
   VERBOSE=1
 fi
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")"; pwd)
-cd "$SCRIPT_DIR/.."
+# Navigate to project root (parent of scripts directory)
+cd "$(dirname "$0")/.." || exit 1
+PROJECT_ROOT=$(pwd)
 
 if [ $VERBOSE -eq 1 ]; then
   echo ""
   echo "==============================================="
-  echo "  ${GREEN}YoutubeDownloader - Starting Service${NC}"
+  echo "  YouTube Downloader - Starting"
   echo "==============================================="
   echo ""
 fi
 
-# Find Python executable
-PYTHON_BIN=""
-if command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="python3"
-elif command -v python >/dev/null 2>&1; then
-  PYTHON_BIN="python"
-else
+# Check if Python is available
+if ! command -v python3 &> /dev/null; then
   if [ $VERBOSE -eq 1 ]; then
-    echo "[ERROR] Python is not installed or not on PATH." >&2
-    echo ""
+    echo "[ERROR] Python 3 is not installed or not on PATH."
   fi
   exit 1
 fi
@@ -42,46 +33,70 @@ if [ ! -d ".venv" ]; then
   if [ $VERBOSE -eq 1 ]; then
     echo "[*] Creating virtual environment..."
   fi
-  "$PYTHON_BIN" -m venv .venv
+  python3 -m venv .venv
+  if [ $? -ne 0 ]; then
+    if [ $VERBOSE -eq 1 ]; then
+      echo "[ERROR] Failed to create virtual environment."
+    fi
+    exit 1
+  fi
   if [ $VERBOSE -eq 1 ]; then
     echo "[OK] Virtual environment created."
-  fi
-else
-  if [ $VERBOSE -eq 1 ]; then
-    echo "[OK] Virtual environment already exists."
   fi
 fi
 
 # Activate virtual environment
-. ./.venv/bin/activate
-
-# Install dependencies
+source .venv/bin/activate
+if [ $? -ne 0 ]; then
+  if [ $VERBOSE -eq 1 ]; then
+    echo "[ERROR] Failed to activate virtual environment."
+  fi
+  exit 1
+fi
 if [ $VERBOSE -eq 1 ]; then
-  echo ""
-  echo "[*] Installing dependencies..."
-  python -m pip install --quiet --upgrade pip
-  python -m pip install --quiet -r requirements.txt
-  echo "[OK] Dependencies installed."
-  echo ""
-else
-  python -m pip install --quiet --upgrade pip 2>/dev/null || true
-  python -m pip install --quiet -r requirements.txt 2>/dev/null || true
+  echo "[OK] Virtual environment activated."
 fi
 
-# Run the application
+# Install/upgrade dependencies
+if [ $VERBOSE -eq 1 ]; then
+  echo "[*] Installing dependencies..."
+fi
+python -m pip install --quiet --upgrade pip > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  if [ $VERBOSE -eq 1 ]; then
+    echo "[ERROR] Failed to upgrade pip."
+  fi
+  exit 1
+fi
+
+python -m pip install --quiet -r requirements.txt > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  if [ $VERBOSE -eq 1 ]; then
+    echo "[ERROR] Failed to install requirements."
+  fi
+  exit 1
+fi
+if [ $VERBOSE -eq 1 ]; then
+  echo "[OK] Dependencies installed."
+fi
+
 if [ $VERBOSE -eq 1 ]; then
   echo ""
   echo "==============================================="
   echo ""
-  echo "  Starting YoutubeDownloader API..."
-  echo ""
-  echo "==============================================="
+  echo "  Starting YouTube Downloader API..."
   echo ""
   python src/main.py
 else
-  nohup python src/main.py >/dev/null 2>&1 &
+  nohup python src/main.py > /dev/null 2>&1 &
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "[!] Failed to start YouTube Downloader."
+    echo ""
+    exit 1
+  fi
   echo ""
-  echo -e "${GREEN}[*]${NC} YoutubeDownloader started in background"
-  echo "    Use ${BLUE}'./run.sh --verbose'${NC} to see output"
+  echo "[*] YouTube Downloader started in background"
+  echo "    Use './run.sh --verbose' to see output"
   echo ""
 fi

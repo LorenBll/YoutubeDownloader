@@ -1,22 +1,25 @@
 [Unit]
-Description=YoutubeDownloader API Service
-After=network-online.target
-Wants=network-online.target
+Description=YouTube Downloader API Service
+After=network.target
 
 [Service]
 Type=simple
-User=YOUR_USERNAME
-WorkingDirectory=/path/to/youtube-downloader
-ExecStartPre=/path/to/youtube-downloader/scripts/setup.sh
-ExecStart=/path/to/youtube-downloader/.venv/bin/python /path/to/youtube-downloader/src/main.py
-Restart=on-failure
+User=yourusername
+WorkingDirectory=/path/to/YoutubeDownloader
+ExecStart=/path/to/YoutubeDownloader/.venv/bin/python src/main.py
+Restart=always
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
 
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
+# Environment variables (optional)
+# Environment="TASK_RETENTION_MINUTES=60"
+# Environment="TASK_CLEANUP_INTERVAL_SECONDS=120"
+
+# Security settings (optional, recommended)
+# NoNewPrivileges=true
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/path/to/data
 
 [Install]
 WantedBy=multi-user.target
