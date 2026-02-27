@@ -2,64 +2,66 @@
 
 Lightweight local API service that downloads single YouTube videos as MP4 or MP3, with async job tracking and batch support.
 
-## Table of contents
+## Table of Contents
 
-- [Why this project](#why-this-project)
+- [Why This Project](#why-this-project)
 - [Features](#features)
-- [Tech stack](#tech-stack)
-- [Project structure](#project-structure)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Run and service modes](#run-and-service-modes)
-- [API reference](#api-reference)
-- [Usage examples](#usage-examples)
-- [Notes and limitations](#notes-and-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Security](#security)
-- [Changelog](#changelog)
-- [Developer](#developer)
-
-## Why this project
-
+- [Tech Stack](#tech-stack)
 Most download scripts are one-off and hard to integrate. This service exposes a clean HTTP API that lets apps queue downloads and poll status reliably.
 
-### Client options
+### Client Options
 
 Users can interact with this service in several ways:
-
+## Tech Stack
 - **API directly:** Call HTTP endpoints from any language or application
 - **[YoutubeDownloader-Client](https://github.com/LorenBll/YoutubeDownloader-Client):** CLI client for easy batch downloads and task management
-- **Custom integrations:** Build your own tools using the REST API
+## Project Structure
 
 ## Features
 
-- Async download jobs with task IDs
+### Quick Start
 - MP4 (video) and MP3 (audio) support
 - Batch request support via `videos` array
-- Strong input validation with helpful error messages
+### Manual Execution
 - YouTube URL validation (youtube.com/youtu.be only)
 - Playlist URLs rejected (single videos only)
 - Permission and disk space error handling
-- Health endpoint with queue/runtime metrics
+### Background Mode
 - In-memory task retention with automatic cleanup worker
 - Uses `pytubefix` first, falls back to `pytube`
-- Background service mode (runs silently without terminal)
+### Auto-Startup Configuration
 - Auto-startup configuration for Windows, Linux, and macOS
 
 ## Tech stack
-
+## API Reference
 - Python 3.10+
 - Flask
 - pytubefix / pytube
-
+## Usage Examples
 ## Project structure
 
 ```text
-.
+## Notes and Limitations
 ├─ src/
 │  └─ main.py                       # Main Flask application
-├─ scripts/
+## License
 │  ├─ run.bat                       # Windows run script
+The Unlicense - See [LICENSE](LICENSE) file for details
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## Support
+
+For issues, questions, or contributions:
+- Open an issue on GitHub
+- Check existing issues for solutions
+- Provide detailed information about your environment
 │  ├─ run.sh                        # Unix run script
 │  ├─ setup.bat                     # Windows setup script
 │  └─ setup.sh                      # Unix setup script
@@ -185,9 +187,9 @@ curl http://127.0.0.1:49153/api/health
 
 Use the files in `deployment/` to start the service automatically on boot:
 
-- Windows: `deployment/startup-windows.vbs` (Startup folder or Task Scheduler)
-- Linux: `deployment/youtube-downloader.service` (systemd)
-- macOS: `deployment/com.youtube-downloader.plist` (launchd)
+- **Windows:** `deployment/startup-windows.vbs` (place in Startup folder)
+- **Linux:** `deployment/service.service` (systemd)
+- **macOS:** `deployment/com.service.plist` (launchd)
 
 ## API reference
 
@@ -399,23 +401,24 @@ ffmpeg -version
 ```bash
 curl -X POST http://localhost:49153/api/download \
   -H "Content-Type: application/json" \
-  -d '{
-    "video_link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    "format": "mp4",
-    "quality": "720p",
-    "folder": "/Users/username/Downloads"
-  }'
-```
-
-### Check task status
-
-```bash
-curl http://localhost:49153/api/download/{task_id}
-```
-
-### Batch download
-
-```bash
+YoutubeDownloader/
+├── src/
+│   └── main.py                     # Main Flask application
+├── scripts/
+│   ├── run.bat                     # Windows run script
+│   ├── run.sh                      # Unix run script
+│   ├── setup.bat                   # Windows setup script
+│   └── setup.sh                    # Unix setup script
+├── deployment/
+│   ├── startup-windows.vbs         # Windows auto-startup wrapper
+│   ├── service.service             # Linux systemd service file
+│   └── com.service.plist           # macOS launchd configuration
+├── resources/
+│   └── configuration.json          # Service configuration
+├── requirements.txt                # Python dependencies
+├── LICENSE
+├── SECURITY.md
+└── README.md
 curl -X POST http://localhost:49153/api/download \
   -H "Content-Type: application/json" \
   -d '{

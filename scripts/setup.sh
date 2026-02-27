@@ -102,13 +102,40 @@ fi
 echo "[OK] Dependencies installed."
 echo ""
 
+# Check configuration file
+echo "[*] Checking configuration..."
+if [ ! -f "resources/configuration.json" ]; then
+  echo "[WARNING] Configuration file not found at resources/configuration.json"
+  echo "[*] You need to create this file before running the service."
+  echo ""
+else
+  echo "[OK] Configuration file found."
+fi
+echo ""
+
 echo "==============================================="
 echo "  Setup Complete!"
 echo "==============================================="
 echo ""
-echo "You can now run YouTube Downloader using:"
-echo "  ./scripts/run.sh"
+echo "Next steps:"
+echo "  1. Review/edit resources/configuration.json"
+echo "  2. Make run script executable: chmod +x scripts/run.sh"
+echo "  3. Run the service with: ./scripts/run.sh"
+echo "  4. Test with: curl http://localhost:PORT/api/health"
 echo ""
-echo "To run in verbose mode (see output):"
-echo "  ./scripts/run.sh --verbose"
-echo ""
+
+# OS-specific autostart instructions
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "For auto-startup on macOS:"
+  echo "  1. Edit deployment/com.service.plist (update paths)"
+  echo "  2. cp deployment/com.service.plist ~/Library/LaunchAgents/"
+  echo "  3. launchctl load ~/Library/LaunchAgents/com.service.plist"
+  echo ""
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  echo "For auto-startup on Linux (systemd):"
+  echo "  1. Edit deployment/service.service (update paths and user)"
+  echo "  2. sudo cp deployment/service.service /etc/systemd/system/youtube-downloader.service"
+  echo "  3. sudo systemctl enable youtube-downloader"
+  echo "  4. sudo systemctl start youtube-downloader"
+  echo ""
+fi

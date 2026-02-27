@@ -4,15 +4,14 @@ setlocal enabledelayedexpansion
 REM ========================================
 REM YoutubeDownloader - Windows Setup
 REM ========================================
-REM This script sets up the YoutubeDownloader API on Windows:
-REM - Checks for Python 3.8+
+REM This script sets up the YoutubeDownloader on Windows:
+REM - Checks for Python 3.10+
 REM - Creates a virtual environment
 REM - Installs all required dependencies
-REM - Optionally configures autostart
 
 echo.
 echo ===============================================
-echo   ^^ YoutubeDownloader - Windows Setup
+echo   YoutubeDownloader - Windows Setup
 echo ===============================================
 echo.
 
@@ -26,7 +25,7 @@ where python >nul 2>&1
 if errorlevel 1 (
   echo [ERROR] Python is not installed or not on PATH.
   echo.
-  echo Please install Python 3.8 or later from https://www.python.org/downloads/
+  echo Please install Python 3.10 or later from https://www.python.org/downloads/
   echo Make sure to check "Add Python to PATH" during installation.
   echo.
   pause
@@ -98,7 +97,7 @@ echo.
 REM Install dependencies
 echo [*] Installing dependencies from requirements.txt...
 if not exist "requirements.txt" (
-  echo [ERROR] requirements.txt not found in project root.
+  echo [ERROR] requirements.txt not found!
   pause
   exit /b 1
 )
@@ -107,75 +106,36 @@ python -m pip install -r requirements.txt
 if errorlevel 1 (
   echo [ERROR] Failed to install dependencies.
   echo.
-  echo Please check the error messages above and ensure you have:
-  echo - A stable internet connection
-  echo - Proper permissions to install packages
-  echo.
+  echo Please check your internet connection and requirements.txt file.
   pause
   exit /b 1
 )
 echo [OK] Dependencies installed successfully.
 echo.
 
-REM Verify installation
-echo [*] Verifying installation...
-python -m pip show flask >nul 2>&1
-if errorlevel 1 (
-  echo [WARNING] Could not verify all required packages.
-  echo The installation may be incomplete.
+REM Check configuration file
+echo [*] Checking configuration...
+if not exist "resources\configuration.json" (
+  echo [WARNING] Configuration file not found at resources\configuration.json
+  echo [*] You need to create this file before running the service.
+  echo.
 ) else (
-  echo [OK] Installation verified.
+  echo [OK] Configuration file found.
 )
 echo.
 
-REM Test if main.py exists
-if not exist "src\main.py" (
-  echo [WARNING] src\main.py not found. Project may be incomplete.
-)
-
-echo.
 echo ===============================================
 echo   Setup Complete!
 echo ===============================================
 echo.
-echo You can now run the YoutubeDownloader using:
-echo   scripts\run.bat
+echo Next steps:
+echo   1. Review/edit resources\configuration.json
+echo   2. Run the service with: scripts\run.bat
+echo   3. Test with: http://localhost:PORT/api/health
 echo.
-echo To run in verbose mode ^(see output^):
-echo   scripts\run.bat --verbose
+echo For auto-startup on Windows:
+echo   1. Edit deployment\startup-windows.vbs (update paths if needed)
+echo   2. Press Win+R, type: shell:startup
+echo   3. Copy startup-windows.vbs to the Startup folder
 echo.
-
-echo Do you want to configure autostart at Windows login?
-choice /C YN
-if errorlevel 2 goto skip_autostart
-if errorlevel 1 goto configure_autostart
-
-:configure_autostart
-echo.
-echo [*] Configuring autostart...
-
-REM Create startup shortcut
-set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-set SHORTCUT_PATH=%STARTUP_FOLDER%\YoutubeDownloader.lnk
-
-REM Check if deployment\startup-windows.vbs exists
-if exist "deployment\startup-windows.vbs" (
-  REM Create shortcut to VBS script
-  powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT_PATH%'); $s.TargetPath = '%PROJECT_ROOT%\deployment\startup-windows.vbs'; $s.WorkingDirectory = '%PROJECT_ROOT%'; $s.Save()"
-  if errorlevel 1 (
-    echo [ERROR] Failed to create startup shortcut.
-  ) else (
-    echo [OK] Autostart configured successfully.
-    echo The service will start automatically at Windows login.
-  )
-) else (
-  echo [ERROR] startup-windows.vbs not found in deployment folder.
-  echo Please ensure the deployment files are present.
-)
-echo.
-
-:skip_autostart
-
-echo Press any key to exit...
-pause >nul
-endlocal
+pause
