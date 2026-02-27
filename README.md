@@ -1,74 +1,88 @@
-# YoutubeDownloader (Flask API)
+# YoutubeDownloader
 
-Lightweight local API service that downloads single YouTube videos as MP4 or MP3, with async job tracking and batch support.
+A production-ready REST API service that downloads single YouTube videos as MP4 or MP3, with asynchronous job tracking and batch support.
 
 ## Table of Contents
 
-- [Why This Project](#why-this-project)
 - [Features](#features)
-- [Tech Stack](#tech-stack)
-Most download scripts are one-off and hard to integrate. This service exposes a clean HTTP API that lets apps queue downloads and poll status reliably.
-
-### Client Options
-
-Users can interact with this service in several ways:
-## Tech Stack
-- **API directly:** Call HTTP endpoints from any language or application
-- **[YoutubeDownloader-Client](https://github.com/LorenBll/YoutubeDownloader-Client):** CLI client for easy batch downloads and task management
-## Project Structure
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Service Modes](#service-modes)
+- [API Reference](#api-reference)
+- [Customization Guide](#customization-guide)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Best Practices](#best-practices)
+- [License](#license)
+- [Contributing](#contributing)
+- [Support](#support)
 
 ## Features
 
-### Quick Start
-- MP4 (video) and MP3 (audio) support
-- Batch request support via `videos` array
-### Manual Execution
-- YouTube URL validation (youtube.com/youtu.be only)
-- Playlist URLs rejected (single videos only)
-- Permission and disk space error handling
-### Background Mode
-- In-memory task retention with automatic cleanup worker
-- Uses `pytubefix` first, falls back to `pytube`
-### Auto-Startup Configuration
-- Auto-startup configuration for Windows, Linux, and macOS
+- **MP4 (video) and MP3 (audio) support**
+- **Batch request support via `videos` array**
+- **YouTube URL validation** (youtube.com/youtu.be only)
+- **Playlist URLs rejected** (single videos only)
+- **Permission and disk space error handling**
+- **In-memory task retention** with automatic cleanup worker
+- **Uses `pytubefix` first, falls back to `pytube`**
+- **Auto-startup configuration** for Windows, Linux, and macOS
+- **Asynchronous task processing** with non-blocking API responses
 
-## Tech stack
-## API Reference
-- Python 3.10+
-- Flask
-- pytubefix / pytube
-## Usage Examples
-## Project structure
+## Architecture
+
+The service uses a simple but effective architecture:
+
+1. **Flask Web Server:** Handles HTTP requests and responses
+2. **Background Workers:** Separate threads process downloads asynchronously
+3. **In-Memory Storage:** Tasks are stored in a thread-safe dictionary
+4. **Cleanup Worker:** Daemon thread removes old completed/failed downloads
+5. **Configuration-Driven:** All settings loaded from JSON file
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ HTTP Request
+       ▼
+┌──────────────────────┐
+│   Flask Routes       │
+│  - POST /api/download│
+│  - GET /api/download/id │
+│  - GET /api/health   │
+└──────┬───────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│  Task Queue          │
+│  (In-Memory Dict)    │
+└──────┬───────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│  Worker Threads      │
+│  - Download videos   │
+│  - Update status     │
+└──────────────────────┘
+```
+
+## Project Structure
 
 ```text
-## Notes and Limitations
+YoutubeDownloader/
 ├─ src/
 │  └─ main.py                       # Main Flask application
-## License
+├─ scripts/
 │  ├─ run.bat                       # Windows run script
-The Unlicense - See [LICENSE](LICENSE) file for details
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## Support
-
-For issues, questions, or contributions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Provide detailed information about your environment
 │  ├─ run.sh                        # Unix run script
 │  ├─ setup.bat                     # Windows setup script
 │  └─ setup.sh                      # Unix setup script
 ├─ deployment/
 │  ├─ startup-windows.vbs           # Windows auto-startup wrapper
-│  ├─ youtube-downloader.service    # Linux systemd service file
-│  └─ com.youtube-downloader.plist  # macOS launchd configuration
+│  ├─ service.service               # Linux systemd service file
+│  └─ com.service.plist             # macOS launchd configuration
 ├─ resources/
 │  └─ configuration.json            # Service configuration
 ├─ requirements.txt                 # Python dependencies
@@ -439,24 +453,23 @@ curl -X POST http://localhost:49153/api/download \
   }'
 ```
 
-## Security
 
-This service supports three modes with different security characteristics:
+## License
 
-- **Private mode** (default): Localhost only, no authentication
-- **Unprivate mode**: Network-accessible with API key authentication
-- **Public mode**: Network-accessible without authentication (use with caution)
+The Unlicense - See [LICENSE](LICENSE) file for details
 
-For detailed security considerations, best practices, and production deployment guidelines, see [SECURITY.md](SECURITY.md).
+## Contributing
 
-### Security Quick Tips
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-- Never expose public mode to the internet
-- Use strong API keys in unprivate mode
-- Deploy with HTTPS (reverse proxy) in production
-- Keep dependencies updated
-- Monitor for unusual activity
+## Support
 
-## Developer
-
-Created by [LorenBll](https://github.com/LorenBll)
+For issues, questions, or contributions:
+- Open an issue on GitHub
+- Check existing issues for solutions
+- Provide detailed information about your environment
+- Include logs from `--verbose` mode when reporting issues

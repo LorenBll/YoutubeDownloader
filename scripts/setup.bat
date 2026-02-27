@@ -49,7 +49,7 @@ if exist ".venv" (
   echo [*] Virtual environment already exists.
   echo.
   echo Do you want to recreate it?
-  choice /C YN
+  choice /C YN /M "Recreate virtual environment"
   if errorlevel 2 goto skip_venv_creation
   if errorlevel 1 (
     echo [*] Removing existing virtual environment...

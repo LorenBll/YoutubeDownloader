@@ -84,7 +84,7 @@ if [ $VERBOSE -eq 1 ]; then
   echo ""
   echo "==============================================="
   echo ""
-  echo "  Starting YouTube Downloader API..."
+  echo "  Starting YouTube Downloader..."
   echo ""
   python src/main.py
 else

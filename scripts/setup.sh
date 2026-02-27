@@ -99,7 +99,7 @@ if [ $? -ne 0 ]; then
   echo "Please check your internet connection and requirements.txt file."
   exit 1
 fi
-echo "[OK] Dependencies installed."
+echo "[OK] Dependencies installed successfully."
 echo ""
 
 # Check configuration file

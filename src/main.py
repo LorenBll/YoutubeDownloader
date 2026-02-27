@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -28,6 +29,9 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -504,7 +508,7 @@ def _cleanup_finished_jobs_forever() -> None:
                     
         except Exception as exc:
             # Log errors but keep the cleanup thread running
-            print(f"[Cleanup Thread Error] {exc}", flush=True)
+            logger.error(f"Cleanup Thread Error: {exc}")
 
 
 def _ensure_cleanup_thread_started() -> None:
@@ -1501,6 +1505,7 @@ def health() -> tuple[Any, int]:
         jsonify(
             {
                 "status": "ok",
+                "mode": SERVICE_MODE,
                 "bind": SERVICE_HOST,
                 "port": SERVICE_PORT,
                 "task_counts": counts,
@@ -1528,54 +1533,59 @@ if __name__ == "__main__":
     # ========================================================================
     
     try:
+        # Configure logging before starting service
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        
         # Load configuration from resources/configuration.json
         _initialize_service_config()
     except Exception as exc:
-        print(f"\nERROR: Failed to load configuration: {exc}\n")
+        logger.error(f"Failed to load configuration: {exc}")
         exit(1)
     
     # Start background cleanup thread
     _ensure_cleanup_thread_started()
     # Display startup banner and configuration
     try:
-        print("\n" + "="*50)
-        print("  YoutubeDownloader API Server")
-        print("="*50)
-        print(f"\nMode: {SERVICE_MODE}")
-        print(f"Binding to: http://{SERVICE_HOST}:{SERVICE_PORT}")
+        logger.info("="*50)
+        logger.info("  YoutubeDownloader API Server")
+        logger.info("="*50)
+        logger.info(f"Mode: {SERVICE_MODE}")
+        logger.info(f"Binding to: http://{SERVICE_HOST}:{SERVICE_PORT}")
         if SERVICE_MODE == "unprivate":
-            print(f"API Keys: {len(API_KEYLIST)} key(s) configured")
-        print(f"Threading: enabled")
-        print(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
-        print(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
-        print(f"Cleanup Interval: {TASK_CLEANUP_INTERVAL_SECONDS} seconds")
-        print("\nServer starting...\n")
+            logger.info(f"API Keys: {len(API_KEYLIST)} key(s) configured")
+        logger.info(f"Threading: enabled")
+        logger.info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
+        logger.info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
+        logger.info(f"Cleanup Interval: {TASK_CLEANUP_INTERVAL_SECONDS} seconds")
+        logger.info("Server starting...")
         
         # Start Flask development server
         app.run(host=SERVICE_HOST, port=SERVICE_PORT, debug=False, threaded=True)
         
     except KeyboardInterrupt:
         # Graceful shutdown on Ctrl+C
-        print("\n\n" + "="*50)
-        print("  Server Stopped")
-        print("="*50 + "\n")
+        logger.info("="*50)
+        logger.info("  Server Stopped")
+        logger.info("="*50)
         
     except OSError as exc:
         # Handle common network binding errors
         if "Address already in use" in str(exc):
-            print(
-                f"\nERROR: Port {SERVICE_PORT} is already in use.\n"
-                f"   Either stop the other process, or change the port\n"
-                f"   in resources/configuration.json\n"
+            logger.error(
+                f"Port {SERVICE_PORT} is already in use. "
+                f"Either stop the other process, or change the port in resources/configuration.json"
             )
         elif "Permission denied" in str(exc):
-            print(
-                f"\nERROR: Permission denied to bind to port {SERVICE_PORT}.\n"
-                f"   On Linux/macOS, use a port >= 1024 or run with sudo.\n"
+            logger.error(
+                f"Permission denied to bind to port {SERVICE_PORT}. "
+                f"On Linux/macOS, use a port >= 1024 or run with sudo."
             )
         else:
-            print(f"\nERROR: Network binding failed: {exc}\n")
+            logger.error(f"Network binding failed: {exc}")
             
     except Exception as exc:
         # Catch-all for unexpected errors
-        print(f"\nERROR: Server startup failed: {exc}\n")
+        logger.error(f"Server startup failed: {exc}")

@@ -13,7 +13,7 @@ set PROJECT_ROOT=%CD%
 if %VERBOSE% equ 1 (
   echo.
   echo ===============================================
-  echo   ^^ YoutubeDownloader - Starting Service
+  echo   ^^ YoutubeDownloader - Starting
   echo ===============================================
   echo.
 )
@@ -67,14 +67,14 @@ if %VERBOSE% equ 1 echo [OK] Dependencies installed.
 if %VERBOSE% equ 1 (
   echo.
   echo ===============================================
-  echo.   Starting YoutubeDownloader API...
+  echo.   Starting YoutubeDownloader...
   echo.
   python src/main.py
 ) else (
   start /B python src/main.py >nul 2>&1
   if errorlevel 1 (
     echo.
-    echo [!] Failed to start YoutubeDownloader API.
+    echo [!] Failed to start YoutubeDownloader.
     echo.
     popd
     exit /b 1
