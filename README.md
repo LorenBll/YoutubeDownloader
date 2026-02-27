@@ -12,8 +12,11 @@ Lightweight local API service that downloads single YouTube videos as MP4 or MP3
 - [Configuration](#configuration)
 - [Run and service modes](#run-and-service-modes)
 - [API reference](#api-reference)
+- [Usage examples](#usage-examples)
 - [Notes and limitations](#notes-and-limitations)
 - [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Changelog](#changelog)
 - [Developer](#developer)
 
 ## Why this project
@@ -386,6 +389,57 @@ ffmpeg -version
 - Verify the output folder path is valid and accessible
 - Check disk space; YouTube videos can require large temporary space
 - On Windows, avoid paths over 260 characters
+
+## Usage examples
+
+For comprehensive usage examples including:
+- Single and batch downloads
+- Python and JavaScript client examples
+- cURL commands
+- Common use cases and error handling
+
+See the [EXAMPLES.md](EXAMPLES.md) file.
+
+### Quick Example
+
+Download a video:
+```bash
+curl -X POST http://localhost:49153/api/download \
+  -H "Content-Type: application/json" \
+  -d '{
+    "video_link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "format": "mp4",
+    "quality": "720p",
+    "folder": "/Users/username/Downloads"
+  }'
+```
+
+Check status:
+```bash
+curl http://localhost:49153/api/download/{task_id}
+```
+
+## Security
+
+This service supports three modes with different security characteristics:
+
+- **Private mode** (default): Localhost only, no authentication
+- **Unprivate mode**: Network-accessible with API key authentication
+- **Public mode**: Network-accessible without authentication (use with caution)
+
+For detailed security considerations, best practices, and production deployment guidelines, see [SECURITY.md](SECURITY.md).
+
+### Security Quick Tips
+
+- Never expose public mode to the internet
+- Use strong API keys in unprivate mode
+- Deploy with HTTPS (reverse proxy) in production
+- Keep dependencies updated
+- Monitor for unusual activity
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes, features, and improvements.
 
 ## Developer
 
