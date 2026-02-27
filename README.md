@@ -60,7 +60,9 @@ Users can interact with this service in several ways:
 │  └─ main.py                       # Main Flask application
 ├─ scripts/
 │  ├─ run.bat                       # Windows run script
-│  └─ run.sh                        # Unix run script
+│  ├─ run.sh                        # Unix run script
+│  ├─ setup.bat                     # Windows setup script
+│  └─ setup.sh                      # Unix setup script
 ├─ deployment/
 │  ├─ startup-windows.vbs           # Windows auto-startup wrapper
 │  ├─ youtube-downloader.service    # Linux systemd service file
@@ -392,17 +394,8 @@ ffmpeg -version
 
 ## Usage examples
 
-For comprehensive usage examples including:
-- Single and batch downloads
-- Python and JavaScript client examples
-- cURL commands
-- Common use cases and error handling
+### Download a video
 
-See the [EXAMPLES.md](EXAMPLES.md) file.
-
-### Quick Example
-
-Download a video:
 ```bash
 curl -X POST http://localhost:49153/api/download \
   -H "Content-Type: application/json" \
@@ -414,9 +407,33 @@ curl -X POST http://localhost:49153/api/download \
   }'
 ```
 
-Check status:
+### Check task status
+
 ```bash
 curl http://localhost:49153/api/download/{task_id}
+```
+
+### Batch download
+
+```bash
+curl -X POST http://localhost:49153/api/download \
+  -H "Content-Type: application/json" \
+  -d '{
+    "videos": [
+      {
+        "video_link": "https://www.youtube.com/watch?v=VIDEO1",
+        "format": "mp4",
+        "quality": "720p",
+        "folder": "/Users/username/Downloads"
+      },
+      {
+        "video_link": "https://www.youtube.com/watch?v=VIDEO2",
+        "format": "mp3",
+        "quality": "128kbps",
+        "folder": "/Users/username/Downloads"
+      }
+    ]
+  }'
 ```
 
 ## Security
@@ -436,10 +453,6 @@ For detailed security considerations, best practices, and production deployment 
 - Deploy with HTTPS (reverse proxy) in production
 - Keep dependencies updated
 - Monitor for unusual activity
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes, features, and improvements.
 
 ## Developer
 
