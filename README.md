@@ -314,7 +314,7 @@ Single-item payload:
 {
    "video_link": "https://www.youtube.com/watch?v=...",
    "format": "mp4",
-   "quality": "720",
+   "quality": "720p",
    "folder": "C:/Downloads",
    "name": "optional-file-name"
 }
@@ -328,7 +328,7 @@ Batch payload:
       {
          "video_link": "https://www.youtube.com/watch?v=...",
          "format": "mp3",
-         "quality": "128",
+         "quality": "128kbps",
          "folder": "C:/Downloads"
       }
    ]
@@ -344,9 +344,69 @@ Response (`202`):
 }
 ```
 
+Batch response (`202`):
+
+```json
+{
+   "task_id": "uuid",
+   "status": "queued",
+   "video_count": 1
+}
+```
+
+Notes:
+- `quality` is normalized: mp4 expects values like `720p` (or digits like `720`), mp3 expects `128kbps` (or digits like `128`).
+- Playlist URLs are rejected.
+- In unprivate mode, add an API key header: `Authorization: Bearer <api-key>` or `X-API-Key: <api-key>`.
+
 ### GET `/api/download/<task_id>`
 
 Returns task status (`queued`, `in_progress`, `completed`, `failed`) and result/error payload.
+
+Success response (single item, `completed`):
+
+```json
+{
+   "task_id": "uuid",
+   "status": "completed",
+   "result": {
+      "name": "My Video",
+      "format": "mp4",
+      "requested_quality": "720p",
+      "actual_quality": "720p",
+      "save_path": "C:/Downloads/My Video.mp4"
+   }
+}
+```
+
+Success response (batch, `completed`):
+
+```json
+{
+   "task_id": "uuid",
+   "status": "completed",
+   "result": {
+      "items": [
+         {
+            "index": 0,
+            "status": "completed",
+            "result": {
+               "name": "Track",
+               "format": "mp3",
+               "requested_quality": "128kbps",
+               "actual_quality": "128kbps",
+               "save_path": "C:/Downloads/Track.mp3"
+            }
+         }
+      ],
+      "summary": {
+         "total": 1,
+         "completed": 1,
+         "failed": 0
+      }
+   }
+}
+```
 
 ### GET `/api/health`
 

@@ -1,0 +1,27 @@
+{
+
+    "defaultMode" : "private",
+
+    "private" : {
+    
+        "ip" : "127.0.0.1",
+        "port": 49153
+    
+    },
+    
+    "unprivate" : {
+    
+        "ip" : "<IP_ADDRESS>",
+        "port" : 49153,
+        "keylist" : []
+
+    },
+
+    "public" : {
+        
+        "ip": "<IP_ADDRESS>",
+        "port" : 49153
+
+    }
+
+}
