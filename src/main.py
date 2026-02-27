@@ -186,16 +186,15 @@ def _initialize_service_config() -> None:
 
 def _require_api_key(f):
     """Decorator to enforce API key authentication when running in unprivate mode.
-    
-    This decorator checks for a valid API key in the request headers before
-    allowing access to protected endpoints. In private or public modes, this
-    decorator does nothing.
-    
-    Supported header formats:
-    - Authorization: Bearer <api-key>
-    - Authorization: <api-key>
-    - X-API-Key: <api-key>
-    
+
+    This decorator checks for a valid API key in the request body (JSON) or
+    query string before allowing access to protected endpoints. In private or
+    public modes, this decorator does nothing.
+
+    Supported inputs:
+    - JSON body field: api_key
+    - Query string: ?api_key=<api-key> (useful for GET requests)
+
     Returns:
         401: If no API key is provided
         403: If API key is invalid
@@ -206,24 +205,22 @@ def _require_api_key(f):
         if SERVICE_MODE != "unprivate":
             return f(*args, **kwargs)
         
-        # Extract API key from request headers (check Authorization header first)
-        auth_header = request.headers.get("Authorization", "")
-        
-        # Support both "Bearer <key>" and direct key formats in Authorization header
         api_key = None
-        if auth_header.startswith("Bearer "):
-            api_key = auth_header[7:].strip()  # Remove "Bearer " prefix
-        elif auth_header:
-            api_key = auth_header.strip()  # Direct key without prefix
-        
-        # Fallback: check X-API-Key header as an alternative
+
+        # Primary: API key in JSON body (POST requests)
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+            if isinstance(payload, dict):
+                api_key = str(payload.get("api_key", "")).strip() or None
+
+        # Fallback: API key in query string (useful for GET requests)
         if not api_key:
-            api_key = request.headers.get("X-API-Key", "").strip()
+            api_key = request.args.get("api_key", "").strip() or None
         
         # Validate that an API key was provided
         if not api_key:
             return jsonify({
-                "error": "Authentication required. Provide API key in Authorization header."
+                "error": "Authentication required. Provide api_key in JSON body or query string."
             }), 401
         
         # Verify API key against the configured keylist

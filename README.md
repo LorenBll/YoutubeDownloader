@@ -1,6 +1,6 @@
 # YoutubeDownloader (Flask API)
 
-Lightweight local API service to download single YouTube videos as mp4 (progressive) or mp3 (audio-only), with asynchronous job tracking.
+Lightweight local API service that downloads single YouTube videos as MP4 or MP3, with async job tracking and batch support.
 
 ## Table of contents
 
@@ -9,36 +9,37 @@ Lightweight local API service to download single YouTube videos as mp4 (progress
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Installation](#installation)
-- [Background service mode](#background-service-mode)
+- [Configuration](#configuration)
+- [Run and service modes](#run-and-service-modes)
 - [API reference](#api-reference)
 - [Notes and limitations](#notes-and-limitations)
-- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
 - [Developer](#developer)
 
 ## Why this project
 
-Many download scripts are one-off and hard to integrate with apps. This project exposes a clean HTTP API that lets desktop tools, web frontends, or automation workflows queue downloads and poll status reliably.
+Most download scripts are one-off and hard to integrate. This service exposes a clean HTTP API that lets apps queue downloads and poll status reliably.
 
 ### Client options
 
 Users can interact with this service in several ways:
 
 - **API directly:** Call HTTP endpoints from any language or application
-- **[YoutubeDownloader-Client](https://github.com/LorenBll/YoutubeDownloader-Client):** Dedicated terminal client for easy command-line batch downloads and task management
+- **[YoutubeDownloader-Client](https://github.com/LorenBll/YoutubeDownloader-Client):** CLI client for easy batch downloads and task management
 - **Custom integrations:** Build your own tools using the REST API
 
 ## Features
 
 - Async download jobs with task IDs
-- Single-video support for mp4 and mp3
+- MP4 (video) and MP3 (audio) support
 - Batch request support via `videos` array
-- Comprehensive input validation with actionable error messages
-- YouTube URL format validation (youtube.com/youtu.be only)
-- Playlist URL rejection guard (single videos only)
-- Disk space and permission error detection with helpful feedback
+- Strong input validation with helpful error messages
+- YouTube URL validation (youtube.com/youtu.be only)
+- Playlist URLs rejected (single videos only)
+- Permission and disk space error handling
 - Health endpoint with queue/runtime metrics
-- In-memory job retention with automatic cleanup worker
-- Works with `pytubefix` first, falls back to `pytube`
+- In-memory task retention with automatic cleanup worker
+- Uses `pytubefix` first, falls back to `pytube`
 - Background service mode (runs silently without terminal)
 - Auto-startup configuration for Windows, Linux, and macOS
 
@@ -61,16 +62,12 @@ Users can interact with this service in several ways:
 │  ├─ startup-windows.vbs           # Windows auto-startup wrapper
 │  ├─ youtube-downloader.service    # Linux systemd service file
 │  └─ com.youtube-downloader.plist  # macOS launchd configuration
-├─ .gitignore                       # Git ignore patterns
+├─ resources/
+│  └─ configuration.json            # Service configuration
 ├─ requirements.txt                 # Python dependencies
 ├─ LICENSE
 └─ README.md
 ```
-
-The project follows a clean organizational structure:
-- **src/**: Application source code
-- **scripts/**: Runtime launch scripts for development and production use
-- **deployment/**: System startup configurations for automatic service launching
 
 ## Installation
 
@@ -82,227 +79,138 @@ The project follows a clean organizational structure:
 ### Quick start
 
 1. Clone the repository:
-    ```bash
-    git clone https://github.com/LorenBll/youtube-downloader.git
-    cd youtube-downloader
-    ```
+   ```bash
+   git clone https://github.com/LorenBll/youtube-downloader.git
+   cd youtube-downloader
+   ```
 
 2. Make the run script executable (macOS/Linux only):
-    ```bash
-    chmod +x scripts/run.sh
-    ```
+   ```bash
+   chmod +x scripts/run.sh
+   ```
 
 3. Run the application:
-    - **Windows:**
-       ```bash
-       scripts\run.bat
-       ```
-    - **macOS/Linux:**
-       ```bash
-       ./scripts/run.sh
-       ```
+   - **Windows:**
+     ```bash
+     scripts\run.bat
+     ```
+   - **macOS/Linux:**
+     ```bash
+     ./scripts/run.sh
+     ```
 
 By default, the service starts in the background. To see real-time output and debug information, use the `--verbose` flag:
-    - **Windows:**
-       ```bash
-       scripts\run.bat --verbose
-       ```
-    - **macOS/Linux:**
-       ```bash
-       ./scripts/run.sh --verbose
-       ```
+- **Windows:**
+  ```bash
+  scripts\run.bat --verbose
+  ```
+- **macOS/Linux:**
+  ```bash
+  ./scripts/run.sh --verbose
+  ```
 
-The run scripts will automatically create a virtual environment and install dependencies on first run.
+The run scripts create a virtual environment and install dependencies on first run.
 
 ### Manual execution
 
 If you prefer to manage the environment yourself:
 
-1. Create and activate virtual environment:
-    ```bash
-    python -m venv .venv
-    # Windows
-    .venv\Scripts\activate
-    # macOS/Linux
-    source .venv/bin/activate
-    ```
+1. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   # Windows
+   .venv\Scripts\activate
+   # macOS/Linux
+   source .venv/bin/activate
+   ```
 
 2. Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 3. Run the API:
-    ```bash
-    python src/main.py
-    ```
+   ```bash
+   python src/main.py
+   ```
 
 The API binds to `127.0.0.1:49153` by default.
 
-## Background service mode
+## Configuration
 
-The run scripts automatically start the service in the background without displaying a terminal window. This allows the web service to run silently in the background while remaining accessible via the HTTP API.
+Configuration is loaded from `resources/configuration.json`. It supports three modes:
 
-- **Background mode (default):** The terminal closes immediately after startup. The service continues running and listening for API requests.
-- **Verbose mode:** Use the `--verbose` flag to keep the terminal open and observe real-time server output and debug information.
+- **private:** Local-only service with no authentication
+- **unprivate:** Requires API keys for protected endpoints
+- **public:** No authentication and intended for LAN access
 
-You can query the `/api/health` endpoint to verify the service is running, or check process listings (Task Manager on Windows, or `ps` on macOS/Linux).
+Example structure:
+
+```json
+{
+   "defaultMode": "private",
+   "private": {"ip": "127.0.0.1", "port": 49153},
+   "unprivate": {"ip": "127.0.0.1", "port": 49153, "keylist": ["your-key"]},
+   "public": {"ip": "0.0.0.0", "port": 49153}
+}
+```
+
+Optional environment variables:
+
+- `TASK_RETENTION_MINUTES` (default `30`): How long completed/failed tasks stay in memory
+- `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`): Cleanup worker interval
+- `FFMPEG_PATH` (optional): Full path to the ffmpeg executable
+
+## Run and service modes
+
+### Background mode
+
+The run scripts start the service in the background without displaying a terminal window.
+
+- **Background mode (default):** Terminal closes after startup
+- **Verbose mode:** Use `--verbose` to keep the terminal open
+
+Verify the service is running:
+
+```bash
+curl http://127.0.0.1:49153/api/health
+```
 
 ### Auto-startup configuration
 
-To have the service start automatically when your system boots, configure the appropriate startup mechanism for your operating system:
+Use the files in `deployment/` to start the service automatically on boot:
 
-#### Windows
-
-**Method 1: Startup Folder (User-level)**
-
-1. Open the startup folder:
-   - Press `Win+R`
-   - Type `shell:startup`
-   - Press Enter
-
-2. Copy `deployment/startup-windows.vbs` to this folder
-
-3. The service will start automatically when you log in
-
-**Method 2: Task Scheduler (System-level)**
-
-1. Open Task Scheduler (`taskschd.msc`)
-
-2. Create a new task:
-   - **General tab:**
-     - Name: YoutubeDownloader API
-     - Run whether user is logged on or not
-     - Run with highest privileges
-
-   - **Triggers tab:**
-     - New trigger: At startup
-     - Delay task for: 30 seconds (recommended)
-
-   - **Actions tab:**
-     - Action: Start a program
-     - Program/script: `wscript.exe`
-     - Arguments: `"C:\path\to\youtube-downloader\deployment\startup-windows.vbs"`
-     - Start in: (leave empty)
-
-   - **Conditions tab:**
-     - Uncheck "Start only if on AC power" (laptops)
-
-3. Save the task
-
-#### Linux (systemd)
-
-1. Edit `deployment/youtube-downloader.service`:
-   - Replace `YOUR_USERNAME` with your actual username
-   - Replace `/path/to/youtube-downloader` with the full path to the project directory
-
-2. Copy the service file:
-   ```bash
-   sudo cp deployment/youtube-downloader.service /etc/systemd/system/
-   ```
-
-3. Reload systemd:
-   ```bash
-   sudo systemctl daemon-reload
-   ```
-
-4. Enable the service to start at boot:
-   ```bash
-   sudo systemctl enable youtube-downloader
-   ```
-
-5. Start the service now:
-   ```bash
-   sudo systemctl start youtube-downloader
-   ```
-
-6. Check status:
-   ```bash
-   sudo systemctl status youtube-downloader
-   ```
-
-7. View logs:
-   ```bash
-   sudo journalctl -u youtube-downloader -f
-   ```
-
-To uninstall:
-```bash
-sudo systemctl stop youtube-downloader
-sudo systemctl disable youtube-downloader
-sudo rm /etc/systemd/system/youtube-downloader.service
-sudo systemctl daemon-reload
-```
-
-#### macOS (launchd)
-
-1. Edit `deployment/com.youtube-downloader.plist`:
-   - Replace all instances of `/path/to/youtube-downloader` with the full path to the project directory
-
-2. Copy the plist file to the LaunchAgents directory:
-   ```bash
-   cp deployment/com.youtube-downloader.plist ~/Library/LaunchAgents/
-   ```
-
-3. Load the service:
-   ```bash
-   launchctl load ~/Library/LaunchAgents/com.youtube-downloader.plist
-   ```
-
-4. The service will start automatically on login and system restart
-
-5. Check if it's running:
-   ```bash
-   launchctl list | grep youtube-downloader
-   ```
-
-6. View logs:
-   ```bash
-   tail -f /tmp/youtube-downloader.log
-   tail -f /tmp/youtube-downloader-error.log
-   ```
-
-To uninstall:
-```bash
-launchctl unload ~/Library/LaunchAgents/com.youtube-downloader.plist
-rm ~/Library/LaunchAgents/com.youtube-downloader.plist
-```
-
-#### Verification
-
-After setting up auto-startup, verify the service is running:
-
-1. Reboot your system
-
-2. Check if the service is accessible:
-   ```bash
-   curl http://127.0.0.1:49153/api/health
-   ```
-
-3. You should receive a JSON response with `"status": "ok"`
-
-#### Troubleshooting
-
-**Windows:**
-- Check Windows Event Viewer for errors
-- Ensure Python and dependencies are installed system-wide or paths are correct
-- Verify the working directory in the VBS script or Task Scheduler
-
-**Linux:**
-- Check service status: `sudo systemctl status youtube-downloader`
-- View detailed logs: `sudo journalctl -u youtube-downloader -n 100`
-- Verify file permissions and paths
-- Ensure virtual environment is activated correctly
-
-**macOS:**
-- Check launchd status: `launchctl list | grep youtube-downloader`
-- View logs at `/tmp/youtube-downloader.log` and `/tmp/youtube-downloader-error.log`
-- Verify paths are absolute and correct
-- Check permissions on the plist file
-
-**Security note:** For production deployments, consider running the service as a dedicated system user with limited permissions. Network access is already restricted to localhost (127.0.0.1) by default.
+- Windows: `deployment/startup-windows.vbs` (Startup folder or Task Scheduler)
+- Linux: `deployment/youtube-downloader.service` (systemd)
+- macOS: `deployment/com.youtube-downloader.plist` (launchd)
 
 ## API reference
+
+### Authentication (unprivate mode only)
+
+Provide the API key in the request body or query string:
+
+- **POST requests:** include `api_key` in the JSON body
+- **GET requests:** add `?api_key=<api-key>` to the URL
+
+Example (POST):
+
+```json
+{
+   "api_key": "your-key",
+   "video_link": "https://www.youtube.com/watch?v=...",
+   "format": "mp4",
+   "quality": "720p",
+   "folder": "C:/Downloads",
+   "name": "optional-file-name"
+}
+```
+
+Example (GET):
+
+```
+GET /api/download/<task_id>?api_key=your-key
+```
 
 ### POST `/api/download`
 
@@ -312,6 +220,7 @@ Single-item payload:
 
 ```json
 {
+   "api_key": "your-key",
    "video_link": "https://www.youtube.com/watch?v=...",
    "format": "mp4",
    "quality": "720p",
@@ -324,6 +233,7 @@ Batch payload:
 
 ```json
 {
+   "api_key": "your-key",
    "videos": [
       {
          "video_link": "https://www.youtube.com/watch?v=...",
@@ -355,9 +265,9 @@ Batch response (`202`):
 ```
 
 Notes:
+
 - `quality` is normalized: mp4 expects values like `720p` (or digits like `720`), mp3 expects `128kbps` (or digits like `128`).
 - Playlist URLs are rejected.
-- In unprivate mode, add an API key header: `Authorization: Bearer <api-key>` or `X-API-Key: <api-key>`.
 
 ### GET `/api/download/<task_id>`
 
@@ -408,6 +318,16 @@ Success response (batch, `completed`):
 }
 ```
 
+Failed response (`failed`):
+
+```json
+{
+   "task_id": "uuid",
+   "status": "failed",
+   "error": "Invalid API key."
+}
+```
+
 ### GET `/api/health`
 
 Health report including bind/port, task counts, retention settings, and active YouTube client.
@@ -415,16 +335,16 @@ Health report including bind/port, task counts, retention settings, and active Y
 ## Notes and limitations
 
 - Playlist URLs are intentionally rejected.
-- mp4 uses progressive streams up to 720p. Higher qualities use separate video/audio streams that are merged with ffmpeg.
+- MP4 uses progressive streams up to 720p. Higher qualities use separate video/audio streams that are merged with ffmpeg.
 - Task data is in-memory and cleared on process restart.
 
 ### Install ffmpeg
 
-High-quality mp4 downloads (above 720p) require ffmpeg to merge video and audio streams.
+High-quality MP4 downloads (above 720p) require ffmpeg to merge video and audio streams.
 
 **Windows**
 
-1. Download the “Release full” build from https://www.gyan.dev/ffmpeg/builds/
+1. Download the Release full build from https://www.gyan.dev/ffmpeg/builds/
 2. Extract the zip (for example: `C:\ffmpeg`)
 3. Add `C:\ffmpeg\bin` to your PATH
 4. Open a new terminal and run:
@@ -447,33 +367,25 @@ sudo apt install ffmpeg
 ffmpeg -version
 ```
 
-## Configuration
+## Troubleshooting
 
-Optional environment variables:
+**"Address already in use"**
+- Another process is using the configured port
+- Update `resources/configuration.json` to use a different port
 
-- `TASK_RETENTION_MINUTES` (default `30`) - Completed/failed task retention time in minutes. Invalid values fall back to default.
-- `TASK_CLEANUP_INTERVAL_SECONDS` (default `60`) - Background cleanup worker interval in seconds. Invalid values fall back to default.
-- `FFMPEG_PATH` (optional) - Full path to the ffmpeg executable when it is not available on PATH.
-
-### Common startup errors
-
-**"Address already in use" on port 8000:**
-- Another instance is running, or port 8000 is in use by another service
-- Stop the conflicting process or change the code to use a different port
-
-**"Permission denied" error:**
+**"Permission denied"**
 - On Linux/macOS, ports below 1024 require root privileges
 - Use a port >= 1024 or run with `sudo` if necessary
 
-**"Cannot create or access download folder" errors:**
-- The specified download folder doesn't have write permissions
+**"Cannot create or access download folder"**
+- The folder does not exist or is not writable
 - Ensure the folder exists and your user account has write access
-- Check available disk space; downloads may fail if disk is full
+- Check available disk space
 
-**Download fails with "Cannot write file" error:**
+**"Cannot write file"**
 - Verify the output folder path is valid and accessible
-- Check disk space: YouTube videos require significant temporary and final space
-- On Windows, ensure the path doesn't exceed 260 characters or contains invalid characters
+- Check disk space; YouTube videos can require large temporary space
+- On Windows, avoid paths over 260 characters
 
 ## Developer
 
