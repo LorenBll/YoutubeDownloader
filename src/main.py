@@ -350,7 +350,9 @@ def _build_safe_filename(file_name: str) -> str:
     r"""Sanitize and validate filename for safe filesystem operations.
     
     Removes potentially dangerous characters:
-    - Path separators (/ and \) are replaced with underscores
+    - Path separators (/, \) are replaced with underscores
+    - Filesystem-invalid characters (<, >, :, ", |, ?, *, &) are replaced with underscores
+    - Control characters and null bytes are removed
     - Excessive whitespace is collapsed
     - Empty names are rejected
     
@@ -363,10 +365,19 @@ def _build_safe_filename(file_name: str) -> str:
     Raises:
         ValueError: If filename is empty after sanitization
     """
-    # Replace path separators with underscores to prevent directory traversal
-    cleaned = file_name.strip().replace("\\", "_").replace("/", "_")
+    # Strip leading/trailing whitespace
+    cleaned = file_name.strip()
     
-    # Collapse multiple spaces into single spaces
+    # Replace filesystem-invalid characters with underscores
+    # This includes: path separators, Windows forbidden chars, and other problematic chars
+    invalid_chars = r'<>:"/\|?*&'
+    for char in invalid_chars:
+        cleaned = cleaned.replace(char, "_")
+    
+    # Remove control characters and null bytes
+    cleaned = "".join(char for char in cleaned if ord(char) >= 32 or char in "\t\n\r")
+    
+    # Collapse multiple spaces into single spaces and remove leading/trailing spaces
     cleaned = " ".join(cleaned.split())
     
     # Validate that something remains after cleaning
