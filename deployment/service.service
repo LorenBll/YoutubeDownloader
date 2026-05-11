@@ -1,0 +1,27 @@
+# systemd unit for the service. Update user and paths before installation.
+
+[Unit]
+Description=YoutubeDownloader
+After=network.target
+
+[Service]
+Type=simple
+User=yourusername
+WorkingDirectory=/path/to/YoutubeDownloader
+ExecStart=/path/to/YoutubeDownloader/.venv/bin/python src/main.py
+Restart=always
+RestartSec=10
+
+# Optional environment variables
+# Environment="TASK_RETENTION_MINUTES=60"
+# Environment="TASK_CLEANUP_INTERVAL_SECONDS=120"
+
+# Optional security settings (recommended for production)
+# NoNewPrivileges=true
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/path/to/data
+
+[Install]
+WantedBy=multi-user.target

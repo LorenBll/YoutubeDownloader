@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- launchd plist for the service. Update paths before installation. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.youtube-downloader</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/YoutubeDownloader/.venv/bin/python</string>
+        <string>/path/to/YoutubeDownloader/src/main.py</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/path/to/YoutubeDownloader</string>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>StandardOutPath</key>
+    <string>/tmp/youtube-downloader.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/tmp/youtube-downloader.error.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TASK_RETENTION_MINUTES</key>
+        <string>30</string>
+        <key>TASK_CLEANUP_INTERVAL_SECONDS</key>
+        <string>60</string>
+    </dict>
+</dict>
+</plist>
