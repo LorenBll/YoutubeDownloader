@@ -9,11 +9,21 @@ Set objFSO = CreateObject("Scripting.FileSystemObject")
 scriptDir = objFSO.GetParentFolderName(WScript.ScriptFullName)
 projectRoot = objFSO.GetParentFolderName(scriptDir)
 
-' Change to project root
-objShell.CurrentDirectory = projectRoot
+' Construct the full path to the batch file
+batchFilePath = projectRoot & "\scripts\run.bat"
 
-' Run the batch file silently
-objShell.Run "cmd /c scripts\run.bat", 0, False
+' Check if batch file exists
+if not objFSO.FileExists(batchFilePath) then
+    WScript.Echo "ERROR: run.bat not found at " & batchFilePath
+    WScript.Quit 1
+end if
+
+' Run the batch file from the project root
+objShell.Run "cmd /c cd /d " & quote(projectRoot) & " && scripts\run.bat", 0, False
+
+Function quote(s)
+    quote = Chr(34) & s & Chr(34)
+End Function
 
 Set objShell = Nothing
 Set objFSO = Nothing

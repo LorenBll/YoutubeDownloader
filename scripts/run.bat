@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Start YouTube Downloader.
+REM Start YoutubeDownloader.
 
 set VERBOSE=0
 if "%1"=="--verbose" (
@@ -25,13 +25,19 @@ for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
   set MINOR=%%b
 )
 
-if %MAJOR% lss 3 (
+if not defined MAJOR (
+  if %VERBOSE% equ 1 echo ERROR: Could not determine Python version.
+  popd
+  exit /b 1
+)
+
+if "%MAJOR%" lss "3" (
   if %VERBOSE% equ 1 echo ERROR: Python 3.10+ required; found %PYTHON_VERSION%
   popd
   exit /b 1
 )
 
-if %MAJOR% equ 3 if %MINOR% lss 10 (
+if "%MAJOR%" equ "3" if "%MINOR%" lss "10" (
   if %VERBOSE% equ 1 echo ERROR: Python 3.10+ required; found %PYTHON_VERSION%
   popd
   exit /b 1
@@ -52,7 +58,13 @@ if not exist ".venv" (
 )
 
 REM Activate virtual environment.
-call .venv\Scripts\activate.bat
+if not exist ".venv\Scripts\activate.bat" (
+  if %VERBOSE% equ 1 echo ERROR: Virtual environment activation script not found at .venv\Scripts\activate.bat
+  popd
+  exit /b 1
+)
+
+call ".venv\Scripts\activate.bat"
 if errorlevel 1 (
   if %VERBOSE% equ 1 echo ERROR: Failed to activate virtual environment.
   popd
@@ -66,20 +78,20 @@ python -m pip install --quiet --upgrade pip >nul 2>&1
 python -m pip install --quiet -r requirements.txt >nul 2>&1
 if %VERBOSE% equ 1 echo Dependencies installed.
 
-REM Start YouTube Downloader.
+REM Start YoutubeDownloader.
 if %VERBOSE% equ 1 (
   echo.
-  echo YouTube Downloader starting...
+  echo YoutubeDownloader starting...
   echo.
   python src/main.py
 ) else (
   start /B python src/main.py >nul 2>&1
   if errorlevel 1 (
-    echo ERROR: Failed to start YouTube Downloader.
+    echo ERROR: Failed to start YoutubeDownloader.
     popd
     exit /b 1
   )
-  echo YouTube Downloader started in background. Run 'run.bat --verbose' to see output.
+  echo YoutubeDownloader started in background. Run 'run.bat --verbose' to see output.
 )
 
 popd

@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Set up YouTube Downloader on Windows.
+REM Set up YoutubeDownloader on Windows.
 
 echo.
-echo YouTube Downloader - Windows Setup
+echo YoutubeDownloader - Windows Setup
 echo.
 
 cd /d "%~dp0.."
@@ -28,14 +28,21 @@ for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
   set MINOR=%%b
 )
 
-if %MAJOR% lss 3 (
+if not defined MAJOR (
+  echo ERROR: Could not determine Python version.
+  echo.
+  pause
+  exit /b 1
+)
+
+if "%MAJOR%" lss "3" (
   echo ERROR: Python 3.10+ required; found %PYTHON_VERSION%
   echo.
   pause
   exit /b 1
 )
 
-if %MAJOR% equ 3 if %MINOR% lss 10 (
+if "%MAJOR%" equ "3" if "%MINOR%" lss "10" (
   echo ERROR: Python 3.10+ required; found %PYTHON_VERSION%
   echo.
   pause
@@ -69,7 +76,13 @@ if not exist ".venv" (
 )
 
 REM Activate and install.
-call .venv\Scripts\activate.bat
+if not exist ".venv\Scripts\activate.bat" (
+  echo ERROR: Virtual environment activation script not found at .venv\Scripts\activate.bat
+  pause
+  exit /b 1
+)
+
+call ".venv\Scripts\activate.bat"
 if errorlevel 1 (
   echo ERROR: Failed to activate virtual environment.
   pause
@@ -91,14 +104,14 @@ echo Dependencies installed.
 echo.
 echo Checking configuration...
 if not exist "resources\configuration.json" (
-  echo WARNING: Create resources\configuration.json before running YouTube Downloader.
+  echo WARNING: Create resources\configuration.json before running YoutubeDownloader.
 ) else (
   echo Configuration file found.
 )
 
 echo.
 echo ===============================================
-echo   YouTube Downloader Setup Complete
+echo   YoutubeDownloader Setup Complete
 echo ===============================================
 echo.
 echo Next: scripts\run.bat
