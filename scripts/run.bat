@@ -72,6 +72,13 @@ if errorlevel 1 (
 )
 if %VERBOSE% equ 1 echo Virtual environment activated.
 
+set PYTHON_EXE=%CD%\.venv\Scripts\python.exe
+if not exist "%PYTHON_EXE%" (
+  if %VERBOSE% equ 1 echo ERROR: Python executable not found at %PYTHON_EXE%
+  popd
+  exit /b 1
+)
+
 REM Install or upgrade dependencies.
 if %VERBOSE% equ 1 echo Installing dependencies...
 python -m pip install --quiet --upgrade pip >nul 2>&1
@@ -83,14 +90,9 @@ if %VERBOSE% equ 1 (
   echo.
   echo YoutubeDownloader starting...
   echo.
-  python src/main.py
+  "%PYTHON_EXE%" src/main.py
 ) else (
-  start /B python src/main.py >nul 2>&1
-  if errorlevel 1 (
-    echo ERROR: Failed to start YoutubeDownloader.
-    popd
-    exit /b 1
-  )
+  start "" /B "%PYTHON_EXE%" src/main.py >nul 2>&1
   echo YoutubeDownloader started in background. Run 'run.bat --verbose' to see output.
 )
 
