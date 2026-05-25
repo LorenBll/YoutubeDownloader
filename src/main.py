@@ -1,4 +1,4 @@
-"""Download YouTube videos and audio via a REST API on your local machine."""
+"""YoutubeDownloader local web service."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, request
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
