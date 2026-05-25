@@ -14,7 +14,7 @@ REST API for downloading YouTube videos or audio on a local machine. The server 
 
 ## About
 
-This project provides a small Flask service that downloads YouTube media to a folder you choose. It supports `mp4` and `mp3` and handles queued background jobs. The server binds using the `ip` and `port` values in `resources/configuration.json`.
+This project provides a small Flask service that downloads YouTube media to a folder you choose. It supports `mp4` and `mp3` and handles queued background jobs. The server always binds to `127.0.0.1` and uses the `port` value in `resources/configuration.json`.
 
 ## Features
 
@@ -35,7 +35,7 @@ YoutubeDownloader/
 │   ├── service.service          # systemd service example
 │   └── startup-windows.vbs      # Windows startup helper
 ├── resources/
-│   └── configuration.json       # Host and port settings
+│   └── configuration.json       # Port setting
 ├── scripts/
 │   ├── run.bat                  # Windows launcher
 │   ├── run.sh                   # macOS/Linux launcher
@@ -50,7 +50,7 @@ YoutubeDownloader/
 
 The code is intentionally compact:
 - `src/main.py` contains configuration loading, request validation, background workers, and all API routes.
-- `resources/configuration.json` controls the bind address and port.
+- `resources/configuration.json` controls the port. The bind address is always `127.0.0.1`.
 - `scripts/` provides the quickest way to create the virtual environment, install dependencies, and start the server.
 
 ## Installation
@@ -70,7 +70,7 @@ The code is intentionally compact:
    ```
 
 2. **Configure the service:**
-   Edit [resources/configuration.json](resources/configuration.json) and set the IP and port as needed.
+   Edit [resources/configuration.json](resources/configuration.json) and set the port as needed.
 
 3. **Install dependencies:**
    - Windows: run [scripts/setup.bat](scripts/setup.bat)

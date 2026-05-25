@@ -55,7 +55,7 @@ YouTubeClient, YOUTUBE_CLIENT_NAME = _resolve_youtube_client()
 # ============================================================================
 
 # Service configuration (loaded from configuration.json at startup)
-SERVICE_HOST = None
+SERVICE_BIND_ADDRESS = "127.0.0.1"
 SERVICE_PORT = None
 
 # API request validation constants
@@ -111,9 +111,8 @@ def _load_configuration() -> dict[str, Any]:
 
 def _initialize_service_config() -> None:
     """Load and validate service configuration."""
-    global SERVICE_HOST, SERVICE_PORT
+    global SERVICE_PORT
     config = _load_configuration()
-    SERVICE_HOST = config.get("ip", "127.0.0.1")
 
     try:
         SERVICE_PORT = int(config.get("port", 49156))
@@ -1037,7 +1036,7 @@ def health() -> tuple[Any, int]:
         jsonify(
             {
                 "status": "ok",
-                "bind": SERVICE_HOST,
+                "bind": SERVICE_BIND_ADDRESS,
                 "port": SERVICE_PORT,
                 "task_counts": counts,
                 "task_retention_minutes": TASK_RETENTION_MINUTES,
@@ -1079,7 +1078,7 @@ if __name__ == "__main__":
         logger.info("=" * 50)
         logger.info("  YoutubeDownloader API Server")
         logger.info("=" * 50)
-        logger.info(f"Binding to: http://{SERVICE_HOST}:{SERVICE_PORT}")
+        logger.info(f"Binding to: http://{SERVICE_BIND_ADDRESS}:{SERVICE_PORT}")
         logger.info(f"Threading: enabled")
         logger.info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
         logger.info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
@@ -1087,7 +1086,12 @@ if __name__ == "__main__":
         logger.info("Server starting...")
 
         # Start Flask development server
-        app.run(host=SERVICE_HOST, port=SERVICE_PORT, debug=False, threaded=True)
+        app.run(
+            host=SERVICE_BIND_ADDRESS,
+            port=SERVICE_PORT,
+            debug=False,
+            threaded=True,
+        )
 
     except KeyboardInterrupt:
         # Graceful shutdown on Ctrl+C
