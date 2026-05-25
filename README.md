@@ -14,7 +14,7 @@ REST API for downloading YouTube videos or audio on a local machine. The server 
 
 ## About
 
-This project provides a small Flask service that downloads YouTube media to a folder you choose. It supports `mp4` and `mp3`, handles queued background jobs, and can be run in private, unprivate, or public mode depending on `resources/configuration.json`.
+This project provides a small Flask service that downloads YouTube media to a folder you choose. It supports `mp4` and `mp3` and handles queued background jobs. The server binds using the `ip` and `port` values in `resources/configuration.json`.
 
 ## Features
 
@@ -24,7 +24,7 @@ This project provides a small Flask service that downloads YouTube media to a fo
 - **Quality Selection:** Choose video resolution or audio bitrate
 - **Background Jobs:** Requests return a task id immediately while downloads continue in worker threads
 - **Task Retention:** Completed and failed jobs are kept temporarily and cleaned up automatically
-- **Optional API Key Protection:** `unprivate` mode requires an `api_key` in the JSON body or query string
+The server exposes a single unauthenticated HTTP API.
 
 ## Project Structure
 
@@ -35,7 +35,7 @@ YoutubeDownloader/
 │   ├── service.service          # systemd service example
 │   └── startup-windows.vbs      # Windows startup helper
 ├── resources/
-│   └── configuration.json       # Host, port, mode, and API key settings
+│   └── configuration.json       # Host and port settings
 ├── scripts/
 │   ├── run.bat                  # Windows launcher
 │   ├── run.sh                   # macOS/Linux launcher
@@ -50,7 +50,7 @@ YoutubeDownloader/
 
 The code is intentionally compact:
 - `src/main.py` contains configuration loading, request validation, background workers, and all API routes.
-- `resources/configuration.json` controls the bind address, port, and service mode.
+- `resources/configuration.json` controls the bind address and port.
 - `scripts/` provides the quickest way to create the virtual environment, install dependencies, and start the server.
 
 ## Installation
@@ -70,7 +70,7 @@ The code is intentionally compact:
    ```
 
 2. **Configure the service:**
-   Edit [resources/configuration.json](resources/configuration.json) and set the mode, IP, port, and API keys as needed.
+   Edit [resources/configuration.json](resources/configuration.json) and set the IP and port as needed.
 
 3. **Install dependencies:**
    - Windows: run [scripts/setup.bat](scripts/setup.bat)
@@ -94,8 +94,6 @@ The code is intentionally compact:
 
 ### Configuration Notes
 
-- `defaultMode` can be `private`, `unprivate`, or `public`.
-- In `unprivate` mode, set `keylist` to the allowed API keys.
 - `TASK_RETENTION_MINUTES` and `TASK_CLEANUP_INTERVAL_SECONDS` can be overridden with environment variables.
 - Set `FFMPEG_PATH` if `ffmpeg` is not on your system `PATH`.
 
@@ -107,7 +105,7 @@ The API exposes three endpoints.
 
 - **Request type:** `POST`
 - **Arguments:** JSON body with the required fields `video_link`, `format`, `quality`, and `folder`.
-- **Optional arguments:** `name` or `file_name` to override the output filename. In `unprivate` mode, `api_key` must be supplied in the JSON body or as a query string parameter.
+- **Optional arguments:** `name` or `file_name` to override the output filename.
 - **Batch form:** send a JSON object with a `videos` array, where each item has the same fields as a single download request.
 - **What it does:** validates the request, creates a background job, and starts the download worker.
 - **How it answers:** returns `202 Accepted` with JSON like `{"task_id": "...", "status": "queued"}`. Batch requests also include `video_count`. Validation errors return `400`. If the worker thread cannot start, the API returns `500` with an error message and the task id.
@@ -115,7 +113,7 @@ The API exposes three endpoints.
 ### `GET /api/download/<task_id>`
 
 - **Request type:** `GET`
-- **Arguments:** path parameter `task_id`. In `unprivate` mode, the same `api_key` rule applies.
+- **Arguments:** path parameter `task_id`.
 - **What it does:** returns the current state of a previously queued task.
 - **How it answers:** returns `200 OK` with JSON containing `task_id` and `status`. If the task finished successfully, the response includes `result`. If it failed, the response includes `error`. If the task id does not exist, the API returns `404` with `{"error": "Task not found."}`.
 
@@ -124,7 +122,7 @@ The API exposes three endpoints.
 - **Request type:** `GET`
 - **Arguments:** none
 - **What it does:** reports service health, binding information, task counts, retention settings, and the YouTube client library currently in use.
-- **How it answers:** returns `200 OK` with JSON containing `status`, `mode`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, and `youtube_client`.
+- **How it answers:** returns `200 OK` with JSON containing `status`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, and `youtube_client`.
 
 ### Request Rules
 

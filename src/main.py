@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 import time
 from datetime import datetime, timezone
-from functools import wraps
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
@@ -56,10 +55,8 @@ YouTubeClient, YOUTUBE_CLIENT_NAME = _resolve_youtube_client()
 # ============================================================================
 
 # Service configuration (loaded from configuration.json at startup)
-SERVICE_MODE = None
 SERVICE_HOST = None
 SERVICE_PORT = None
-API_KEYLIST = []
 
 # API request validation constants
 REQUIRED_FIELDS = ["video_link", "format", "quality", "folder"]
@@ -114,70 +111,14 @@ def _load_configuration() -> dict[str, Any]:
 
 def _initialize_service_config() -> None:
     """Load and validate service configuration."""
-    global SERVICE_MODE, SERVICE_HOST, SERVICE_PORT, API_KEYLIST
+    global SERVICE_HOST, SERVICE_PORT
     config = _load_configuration()
-    SERVICE_MODE = config.get("defaultMode", "private").lower()
+    SERVICE_HOST = config.get("ip", "127.0.0.1")
 
-    if SERVICE_MODE not in {"private", "unprivate", "public"}:
-        raise ValueError(
-            f"Invalid defaultMode '{SERVICE_MODE}' in configuration.json. "
-            "Must be one of: private, unprivate, public"
-        )
-
-    mode_config = config.get(SERVICE_MODE)
-    if mode_config is None:
-        raise ValueError(
-            f"Configuration for mode '{SERVICE_MODE}' not found in configuration.json"
-        )
-
-    SERVICE_HOST = mode_config.get("ip", "127.0.0.1")
-    SERVICE_PORT = mode_config.get("port", 49154)
-
-    if SERVICE_MODE == "unprivate":
-        API_KEYLIST = mode_config.get("keylist", [])
-        if not isinstance(API_KEYLIST, list):
-            raise ValueError(
-                "keylist in unprivate configuration must be an array of API keys"
-            )
-
-
-# ============================================================================
-# AUTHENTICATION DECORATOR
-# ============================================================================
-
-
-def _require_api_key(f):
-    """Require API key in unprivate mode (JSON body or query string)."""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if SERVICE_MODE != "unprivate":
-            return f(*args, **kwargs)
-
-        api_key = None
-        if request.is_json:
-            payload = request.get_json(silent=True) or {}
-            if isinstance(payload, dict):
-                api_key = str(payload.get("api_key", "")).strip() or None
-        if not api_key:
-            api_key = request.args.get("api_key", "").strip() or None
-
-        if not api_key:
-            return (
-                jsonify(
-                    {
-                        "error": "Authentication required. Provide api_key in JSON body or query string."
-                    }
-                ),
-                401,
-            )
-
-        if api_key not in API_KEYLIST:
-            return jsonify({"error": "Invalid API key."}), 403
-
-        return f(*args, **kwargs)
-
-    return decorated_function
+    try:
+        SERVICE_PORT = int(config.get("port", 49156))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("port in configuration.json must be an integer") from exc
 
 
 app = Flask(__name__)
@@ -976,7 +917,6 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
 
 
 @app.post("/api/download")
-@_require_api_key
 def download() -> tuple[Any, int]:
     """Queue a download task. Returns task_id (202 Accepted)."""
     # Ensure background cleanup thread is running
@@ -1040,7 +980,6 @@ def download() -> tuple[Any, int]:
 
 
 @app.get("/api/download/<task_id>")
-@_require_api_key
 def download_status(task_id: str) -> tuple[Any, int]:
     """Get download task status and result."""
     # Ensure cleanup thread is running
@@ -1098,7 +1037,6 @@ def health() -> tuple[Any, int]:
         jsonify(
             {
                 "status": "ok",
-                "mode": SERVICE_MODE,
                 "bind": SERVICE_HOST,
                 "port": SERVICE_PORT,
                 "task_counts": counts,
@@ -1141,10 +1079,7 @@ if __name__ == "__main__":
         logger.info("=" * 50)
         logger.info("  YoutubeDownloader API Server")
         logger.info("=" * 50)
-        logger.info(f"Mode: {SERVICE_MODE}")
         logger.info(f"Binding to: http://{SERVICE_HOST}:{SERVICE_PORT}")
-        if SERVICE_MODE == "unprivate":
-            logger.info(f"API Keys: {len(API_KEYLIST)} key(s) configured")
         logger.info(f"Threading: enabled")
         logger.info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
         logger.info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
