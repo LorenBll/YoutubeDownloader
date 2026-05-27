@@ -1102,7 +1102,7 @@ def health() -> tuple[Any, int]:
             {
                 "status": "ok",
                 "service": "YoutubeDownloader",
-                "bind": SERVICE_BIND_ADDRESS,
+                "bind_address": SERVICE_BIND_ADDRESS,
                 "port": SERVICE_PORT,
                 "task_counts": counts,
                 "task_retention_minutes": TASK_RETENTION_MINUTES,
