@@ -1,17 +1,19 @@
 # YoutubeDownloader
 
-YoutubeDownloader is a small local Flask service for downloading YouTube videos or audio. It accepts single or batch requests, queues each download in the background, and exposes task status through polling endpoints. The server binds to `127.0.0.1` and uses the port in [resources/configuration.json](resources/configuration.json).
+YoutubeDownloader is a local Flask service for downloading YouTube videos or audio. It validates single or batch download requests, runs downloads in background tasks, and exposes task status through polling.
 
 ## About
 
-The service keeps the download workflow local to the machine running it. Runtime configuration lives in [resources/configuration.json](resources/configuration.json), while background job retention can also be controlled with environment variables.
+- Scope: local YouTube download orchestration with format and quality selection.
+- Runtime model: queued worker tasks for download processing and periodic cleanup.
+- Networking: local-only bind (`127.0.0.1`) with health and task-status endpoints.
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.10 or newer
-- `ffmpeg` if you want high-quality `mp4` downloads above 720p
+- `ffmpeg` for high-quality `mp4` merges above 720p
 
 ### Install Dependencies
 
@@ -21,73 +23,69 @@ python -m pip install -r requirements.txt
 
 ### Configuration
 
-Edit [resources/configuration.json](resources/configuration.json) if you want to change the listening port.
+Edit `resources/configuration.json` as needed:
 
-- `port` controls the TCP port the service listens on
-- `TASK_RETENTION_MINUTES` and `TASK_CLEANUP_INTERVAL_SECONDS` can be overridden with environment variables
-- Set `FFMPEG_PATH` if `ffmpeg` is not on your system `PATH`
+- `port`: TCP port used by the service
+
+Optional environment variables:
+
+- `TASK_RETENTION_MINUTES`: retention window for finished tasks
+- `TASK_CLEANUP_INTERVAL_SECONDS`: cleanup loop interval
+- `FFMPEG_PATH`: explicit path to `ffmpeg` when not in `PATH`
 
 ## Run
 
-Start the service with:
+Start with:
 
 ```bash
 python src/main.py
 ```
 
-On Windows, you can also use:
+Windows shortcut:
 
 ```bat
 scripts\run.bat
 ```
 
+Startup behavior is consistent with the other services in this workspace: structured logging and a threaded Flask server.
+
 ## Usage
 
 ### `POST /api/download`
 
-- **Request type:** `POST`
-- **Arguments:** a JSON body with `video_link`, `format`, `quality`, and `folder`
-- **Optional arguments:** `name` or `file_name` to override the output filename
-- **Batch form:** send a JSON object with a `videos` array
-- **What it does:** validates the request, creates a background job, and starts the download worker
-- **How it answers:** returns `202 Accepted` with JSON like `{"task_id": "...", "status": "queued"}`
+- Method: `POST`
+- Input: JSON with `video_link`, `format`, `quality`, and `folder` (supports batch through `videos` array)
+- Behavior: validates input and queues a download task
+- Response: `202 Accepted` with `task_id`
 
 ### `GET /api/task/<task_id>`
 
-- **Request type:** `GET`
-- **Arguments:** path parameter `task_id`
-- **What it does:** returns the current state of a previously queued task
-- **How it answers:** returns `200 OK` with JSON containing `task_id` and `status`
+- Method: `GET`
+- Input: path parameter `task_id`
+- Behavior: returns task state and result or error details when available
+- Response: `200 OK`
 
 ### `GET /api/health`
 
-- **Request type:** `GET`
-- **Arguments:** none
-- **What it does:** reports service health, binding information, task counts, retention settings, and the YouTube client library currently in use
-- **How it answers:** returns `200 OK` with JSON containing `status`, `service`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, `youtube_client`, `hostname`, `primary_ip`, and `local_ips`
-
-The service starts with structured logging and a threaded Flask server, matching the same startup wrapper used by the other projects in this workspace.
+- Method: `GET`
+- Input: none
+- Behavior: reports service and task health with local networking details
+- Response: `200 OK` with `status`, `service`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, `youtube_client`, `hostname`, `primary_ip`, and `local_ips`
 
 ## Project Structure
 
 ```text
 YoutubeDownloader/
 ├── deployment/
-│   ├── com.service.plist
-│   ├── service.service
-│   └── startup-windows.vbs
 ├── resources/
 │   └── configuration.json
 ├── scripts/
-│   ├── run.bat
-│   ├── run.sh
-│   ├── setup.bat
-│   └── setup.sh
 ├── src/
 │   └── main.py
 ├── LICENSE
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── SECURITY.md
 ```
 
 ## License
