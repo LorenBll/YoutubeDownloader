@@ -52,7 +52,7 @@ scripts\run.bat
 - **What it does:** validates the request, creates a background job, and starts the download worker
 - **How it answers:** returns `202 Accepted` with JSON like `{"task_id": "...", "status": "queued"}`
 
-### `GET /api/download/<task_id>`
+### `GET /api/task/<task_id>`
 
 - **Request type:** `GET`
 - **Arguments:** path parameter `task_id`
@@ -64,7 +64,9 @@ scripts\run.bat
 - **Request type:** `GET`
 - **Arguments:** none
 - **What it does:** reports service health, binding information, task counts, retention settings, and the YouTube client library currently in use
-- **How it answers:** returns `200 OK` with JSON containing `status`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, and `youtube_client`
+- **How it answers:** returns `200 OK` with JSON containing `status`, `service`, `bind`, `port`, `task_counts`, `task_retention_minutes`, `task_cleanup_interval_seconds`, `youtube_client`, `hostname`, `primary_ip`, and `local_ips`
+
+The service starts with structured logging and a threaded Flask server, matching the same startup wrapper used by the other projects in this workspace.
 
 ## Project Structure
 

@@ -6,6 +6,7 @@ import importlib
 import json
 import logging
 import os
+import socket
 import shutil
 import subprocess
 import tempfile
@@ -117,6 +118,71 @@ def _initialize_service_config() -> None:
         SERVICE_PORT = int(config.get("port", 49156))
     except (TypeError, ValueError) as exc:
         raise ValueError("port in configuration.json must be an integer") from exc
+
+
+def _collect_local_ip_addresses() -> list[str]:
+    """Gather the IPv4 addresses resolved for the local machine."""
+    addresses: set[str] = {"127.0.0.1"}
+    hostnames = {socket.gethostname(), socket.getfqdn(), "localhost"}
+
+    for hostname in hostnames:
+        if not hostname:
+            continue
+
+        try:
+            _, _, resolved_addresses = socket.gethostbyname_ex(hostname)
+        except OSError:
+            resolved_addresses = []
+
+        for address in resolved_addresses:
+            if _is_ipv4_address(address):
+                addresses.add(address)
+
+        try:
+            for family, _, _, _, sockaddr in socket.getaddrinfo(hostname, None):
+                if family == socket.AF_INET and sockaddr:
+                    candidate = sockaddr[0]
+                    if _is_ipv4_address(candidate):
+                        addresses.add(candidate)
+        except OSError:
+            continue
+
+    return sorted(addresses, key=_sort_ip_address)
+
+
+def _is_ipv4_address(value: object) -> bool:
+    """Check whether a value is a valid IPv4 address string."""
+    if not isinstance(value, str):
+        return False
+
+    parts = value.strip().split(".")
+    if len(parts) != 4:
+        return False
+
+    try:
+        return all(0 <= int(part) <= 255 for part in parts)
+    except ValueError:
+        return False
+
+
+def _sort_ip_address(value: str) -> tuple[int, int, int, int]:
+    """Sort IP addresses numerically while keeping loopback near the front."""
+    parts = value.split(".")
+    if len(parts) != 4:
+        return (255, 255, 255, 255)
+
+    try:
+        return tuple(int(part) for part in parts)  # type: ignore[return-value]
+    except ValueError:
+        return (255, 255, 255, 255)
+
+
+def _get_primary_ip() -> str:
+    """Return the first non-loopback IPv4 address, or loopback as a fallback."""
+    for address in _collect_local_ip_addresses():
+        if address != "127.0.0.1":
+            return address
+    return "127.0.0.1"
 
 
 app = Flask(__name__)
@@ -977,8 +1043,8 @@ def download() -> tuple[Any, int]:
     return jsonify(response_body), 202
 
 
-@app.get("/api/download/<task_id>")
-def download_status(task_id: str) -> tuple[Any, int]:
+@app.get("/api/task/<task_id>")
+def task_status(task_id: str) -> tuple[Any, int]:
     """Get download task status and result."""
     # Ensure cleanup thread is running
     _ensure_cleanup_thread_started()
@@ -1035,12 +1101,16 @@ def health() -> tuple[Any, int]:
         jsonify(
             {
                 "status": "ok",
+                "service": "YoutubeDownloader",
                 "bind": SERVICE_BIND_ADDRESS,
                 "port": SERVICE_PORT,
                 "task_counts": counts,
                 "task_retention_minutes": TASK_RETENTION_MINUTES,
                 "task_cleanup_interval_seconds": TASK_CLEANUP_INTERVAL_SECONDS,
                 "youtube_client": YOUTUBE_CLIENT_NAME,
+                "hostname": socket.gethostname(),
+                "primary_ip": _get_primary_ip(),
+                "local_ips": _collect_local_ip_addresses(),
             }
         ),
         200,
@@ -1053,38 +1123,28 @@ def health() -> tuple[Any, int]:
 
 
 if __name__ == "__main__":
-    # ========================================================================
-    # SERVICE STARTUP
-    # ========================================================================
-
     try:
-        # Configure logging before starting service
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
-
-        # Load configuration from resources/configuration.json
         _initialize_service_config()
     except Exception as exc:
         logger.error(f"Failed to load configuration: {exc}")
         exit(1)
 
-    # Start background cleanup thread
     _ensure_cleanup_thread_started()
-    # Display startup banner and configuration
+
     try:
         logger.info("=" * 50)
         logger.info("  YoutubeDownloader API Server")
         logger.info("=" * 50)
         logger.info(f"Binding to: http://{SERVICE_BIND_ADDRESS}:{SERVICE_PORT}")
-        logger.info(f"Threading: enabled")
+        logger.info("Threading: enabled")
         logger.info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
         logger.info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
         logger.info(f"Cleanup Interval: {TASK_CLEANUP_INTERVAL_SECONDS} seconds")
         logger.info("Server starting...")
-
-        # Start Flask development server
         app.run(
             host=SERVICE_BIND_ADDRESS,
             port=SERVICE_PORT,
@@ -1093,13 +1153,11 @@ if __name__ == "__main__":
         )
 
     except KeyboardInterrupt:
-        # Graceful shutdown on Ctrl+C
         logger.info("=" * 50)
         logger.info("  Server Stopped")
         logger.info("=" * 50)
 
     except OSError as exc:
-        # Handle common network binding errors
         if "Address already in use" in str(exc):
             logger.error(
                 f"Port {SERVICE_PORT} is already in use. "
@@ -1114,5 +1172,4 @@ if __name__ == "__main__":
             logger.error(f"Network binding failed: {exc}")
 
     except Exception as exc:
-        # Catch-all for unexpected errors
         logger.error(f"Server startup failed: {exc}")
