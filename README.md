@@ -8,7 +8,8 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 ## Setup
 1. Install the Python dependencies with `pip install -r requirements.txt`.
 2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
-3. Review `resources/configuration.json` if you want to change the port.
+3. Review `resources/configuration.json` if you want to change the port or restrict download folders.
+4. To restrict access to specific directories, set `allowed_roots` to an array of permitted paths. If `allowed_roots` is empty, you can instead use `blacklisted_roots` to block specific paths.
 
 ## Run
 1. Windows: run `scripts\run.bat`.
@@ -28,6 +29,7 @@ Queues a single or batch download task and returns a task ID.
 			- mp4: values like `720`, `720p`, `1080`, `1080p`
 			- mp3: values like `128`, `128kbps`, `160`, `160kbps`
 		- `folder` (string, required): destination folder path (created if missing).
+			- The folder must be allowed by `resources/configuration.json`.
 		- `name` (string, optional): preferred file name stem.
 		- `file_name` (string, optional alias): alternative to `name`.
 	- Batch mode:

@@ -23,6 +23,11 @@ from flask import Flask, jsonify, request
 
 logger = logging.getLogger(__name__)
 
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "resources" / "configuration.json"
+DEFAULT_SERVICE_PORT = 49156
+ALLOWED_ROOTS: list[Path] = []
+BLACKLISTED_ROOTS: list[Path] = []
+
 
 # ============================================================================
 # YOUTUBE CLIENT INITIALIZATION
@@ -86,38 +91,99 @@ except (ValueError, TypeError):
 
 def _load_configuration() -> dict[str, Any]:
     """Load configuration from resources/configuration.json."""
-    script_dir = Path(__file__).parent
-    config_path = script_dir.parent / "resources" / "configuration.json"
-    if not config_path.exists():
+    if not CONFIG_PATH.exists():
         raise FileNotFoundError(
-            f"Configuration file not found at {config_path}. "
-            "Ensure resources/configuration.json exists."
+            "Configuration file not found. Ensure resources/configuration.json exists."
         )
 
     try:
-        with open(config_path, "r", encoding="utf-8-sig") as f:
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             config = json.load(f)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Configuration file at {config_path} contains invalid JSON: {exc}"
-        ) from exc
+        raise ValueError("Configuration file contains invalid JSON") from exc
     except Exception as exc:
-        raise RuntimeError(
-            f"Failed to read configuration file at {config_path}: {exc}"
-        ) from exc
+        raise RuntimeError("Failed to read configuration file") from exc
 
     return config
+
+
+def _is_within_directory(child: Path, parent: Path) -> bool:
+    """Return True if `child` is inside `parent` (or equal), after resolving."""
+    try:
+        child_resolved = child.resolve()
+        parent_resolved = parent.resolve()
+    except Exception:
+        return False
+
+    try:
+        child_resolved.relative_to(parent_resolved)
+        return True
+    except Exception:
+        return False
+
+
+def _is_within_any_directory(child: Path, parents: list[Path]) -> bool:
+    """Return True if `child` is inside any configured parent directory."""
+    for parent in parents:
+        if _is_within_directory(child, parent):
+            return True
+    return False
 
 
 def _initialize_service_config() -> None:
     """Load and validate service configuration."""
     global SERVICE_PORT
+    global ALLOWED_ROOTS, BLACKLISTED_ROOTS
     config = _load_configuration()
 
     try:
-        SERVICE_PORT = int(config.get("port", 49156))
+        configured_port = config.get("port", DEFAULT_SERVICE_PORT)
+        SERVICE_PORT = int(configured_port)
     except (TypeError, ValueError) as exc:
         raise ValueError("port in configuration.json must be an integer") from exc
+
+    repo_root = Path(__file__).resolve().parent.parent
+
+    allowed_roots: list[Path] = []
+    configured_allowed = config.get("allowed_roots")
+    if isinstance(configured_allowed, list) and configured_allowed:
+        for item in configured_allowed:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            path = Path(item)
+            if not path.is_absolute():
+                path = (repo_root / path).resolve(strict=False)
+            allowed_roots.append(path.resolve())
+
+    blacklisted_roots: list[Path] = []
+    configured_blacklisted = config.get("blacklisted_roots")
+    if isinstance(configured_blacklisted, list) and configured_blacklisted:
+        for item in configured_blacklisted:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            path = Path(item)
+            if not path.is_absolute():
+                path = (repo_root / path).resolve(strict=False)
+            blacklisted_roots.append(path.resolve())
+
+    ALLOWED_ROOTS = allowed_roots
+    BLACKLISTED_ROOTS = blacklisted_roots
+
+
+def _is_path_permitted(path: Path) -> bool:
+    """Return True if `path` is permitted by the configured folder policy."""
+    try:
+        resolved = path.resolve()
+    except Exception:
+        return False
+
+    if ALLOWED_ROOTS:
+        return _is_within_any_directory(resolved, ALLOWED_ROOTS)
+
+    if BLACKLISTED_ROOTS:
+        return not _is_within_any_directory(resolved, BLACKLISTED_ROOTS)
+
+    return True
 
 
 def _collect_local_ip_addresses() -> list[str]:
@@ -244,6 +310,22 @@ def _build_safe_filename(file_name: str) -> str:
     if not cleaned:
         raise ValueError("name must contain at least one non-space character")
     return Path(cleaned).stem or "download"
+
+
+def _normalize_folder_path(folder: object) -> Path:
+    """Normalize and validate the requested download folder path."""
+    folder_value = _require_string(folder, "folder")
+    try:
+        save_dir = Path(folder_value).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ValueError(
+            f"Invalid folder path '{folder_value}'. Path contains invalid characters or is malformed."
+        ) from exc
+
+    if not _is_path_permitted(save_dir):
+        raise ValueError("Requested folder is not permitted by server policy.")
+
+    return save_dir
 
 
 def _resolve_unique_path(directory: Path, stem: str, suffix: str) -> Path:
@@ -541,17 +623,15 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
 
     # Validate and create save directory if it doesn't exist
     try:
-        save_dir = Path(folder).expanduser()  # Expand ~ to user home
-        save_dir.mkdir(parents=True, exist_ok=True)  # Create all parent directories
+        save_dir = _normalize_folder_path(folder)
+        save_dir.mkdir(parents=True, exist_ok=True)
     except (OSError, PermissionError) as exc:
         raise ValueError(
             f"Cannot create or access download folder '{folder}'. "
             f"Check permissions and disk space. Details: {exc}"
         ) from exc
     except (ValueError, TypeError) as exc:
-        raise ValueError(
-            f"Invalid folder path '{folder}'. Path contains invalid characters or is malformed."
-        ) from exc
+        raise ValueError(str(exc)) from exc
 
     # Initialize YouTube client for this video
     try:
@@ -835,6 +915,18 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
+            # Validate target folder against server policy
+            try:
+                _normalize_folder_path(video_payload.get("folder"))
+            except ValueError as exc:
+                video_errors.append(
+                    {
+                        "index": index,
+                        "error": str(exc),
+                    }
+                )
+                continue
+
             # Video passed all validation checks
             validated_videos.append(video_payload)
 
@@ -890,6 +982,12 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
     # Reject playlists
     if _is_playlist_url(video_link):
         return None, {"error": PLAYLIST_NOT_SUPPORTED_ERROR}, 400
+
+    # Validate target folder against server policy
+    try:
+        _normalize_folder_path(payload.get("folder"))
+    except ValueError as exc:
+        return None, {"error": str(exc)}, 400
 
     # Payload is valid
     return payload, None, 200
