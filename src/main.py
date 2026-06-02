@@ -919,10 +919,15 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
             try:
                 _normalize_folder_path(video_payload.get("folder"))
             except ValueError as exc:
+                logger.warning(
+                    "Invalid folder path in batch payload at index %s",
+                    index,
+                    exc_info=True,
+                )
                 video_errors.append(
                     {
                         "index": index,
-                        "error": str(exc),
+                        "error": "Invalid folder path.",
                     }
                 )
                 continue
@@ -987,7 +992,8 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
     try:
         _normalize_folder_path(payload.get("folder"))
     except ValueError as exc:
-        return None, {"error": str(exc)}, 400
+        logger.warning("Invalid folder path in request payload", exc_info=True)
+        return None, {"error": "Invalid folder path."}, 400
 
     # Payload is valid
     return payload, None, 200
