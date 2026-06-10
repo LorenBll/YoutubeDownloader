@@ -8,8 +8,14 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 ## Setup
 1. Install the Python dependencies with `pip install -r requirements.txt`.
 2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
-3. Review `resources/configuration.json` if you want to change the port or restrict download folders.
-4. To restrict access to specific directories, set `allowed_roots` to an array of permitted paths. If `allowed_roots` is empty, you can instead use `blacklisted_roots` to block specific paths.
+3. Review `resources/configuration.json` to configure `port`, `allowed_roots`, and `blacklisted_roots`.
+		- `allowed_roots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
+		- `blacklisted_roots`: list of root paths that are forbidden when `allowed_roots` is empty. If `allowed_roots` is empty and `blacklisted_roots` is non-empty, any path inside a blacklisted root is forbidden.
+		- Behavior summary:
+			- If `allowed_roots` is non-empty → only those roots are permitted (blacklist ignored).
+			- Else if `blacklisted_roots` is non-empty → all paths are permitted except any inside a blacklisted root.
+			- Else (both lists empty) → all paths on the system are permitted.
+4. Leave the project structure intact so the service can find `resources/` and `src/`.
 
 ## Run
 1. Windows: run `scripts\run.bat`.
