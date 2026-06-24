@@ -253,6 +253,22 @@ def _get_primary_ip() -> str:
 
 app = Flask(__name__)
 
+
+def _options_response(allowed_methods: list[str]) -> tuple:
+    """Return an OPTIONS response with allowed methods."""
+    response = jsonify({})
+    response.headers["Allow"] = ", ".join(allowed_methods)
+    response.headers["Access-Control-Allow-Methods"] = ", ".join(allowed_methods)
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response, 200
+
+
+def _head_response() -> tuple:
+    """Return a HEAD response with no body."""
+    response = jsonify({})
+    return response, 200
+
+
 jobs_lock = Lock()
 jobs: dict[str, dict[str, Any]] = {}
 
@@ -1084,9 +1100,12 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
 # ============================================================================
 
 
-@app.post("/api/download")
+@app.route("/api/download", methods=["POST", "OPTIONS"])
 def download() -> tuple[Any, int]:
     """Queue a download task. Returns task_id (202 Accepted)."""
+    if request.method == "OPTIONS":
+        return _options_response(["POST", "OPTIONS"])
+
     # Ensure background cleanup thread is running
     _ensure_cleanup_thread_started()
 
@@ -1147,9 +1166,14 @@ def download() -> tuple[Any, int]:
     return jsonify(response_body), 202
 
 
-@app.get("/api/task/<task_id>")
+@app.route("/api/task/<task_id>", methods=["GET", "HEAD", "OPTIONS"])
 def task_status(task_id: str) -> tuple[Any, int]:
     """Get download task status and result."""
+    if request.method == "OPTIONS":
+        return _options_response(["GET", "HEAD", "OPTIONS"])
+    if request.method == "HEAD":
+        return _head_response()
+
     # Ensure cleanup thread is running
     _ensure_cleanup_thread_started()
 
@@ -1177,9 +1201,14 @@ def task_status(task_id: str) -> tuple[Any, int]:
     return jsonify(response_body), 200
 
 
-@app.get("/api/health")
+@app.route("/api/health", methods=["GET", "HEAD", "OPTIONS"])
 def health() -> tuple[Any, int]:
     """Health check with service status and task statistics."""
+    if request.method == "OPTIONS":
+        return _options_response(["GET", "HEAD", "OPTIONS"])
+    if request.method == "HEAD":
+        return _head_response()
+
     # Ensure cleanup thread is running
     _ensure_cleanup_thread_started()
 

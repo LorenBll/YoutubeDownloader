@@ -24,7 +24,9 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 
 ## API Endpoints
 
-### `POST /api/download`
+All endpoints also support `OPTIONS`; `GET` endpoints additionally support `HEAD`.
+
+### `POST /api/download` (also `OPTIONS`)
 Queues a single or batch download task and returns a task ID.
 
 - Body (JSON object):
@@ -65,7 +67,7 @@ Queues a single or batch download task and returns a task ID.
 		}
 		```
 
-### `GET /api/task/<task_id>`
+### `GET /api/task/<task_id>` (also `HEAD`, `OPTIONS`)
 Returns current task status and final result/error.
 
 - Path parameters:
@@ -105,7 +107,7 @@ Returns current task status and final result/error.
 	- `200` failed -> `{ "task_id": "<uuid>", "status": "failed", "error": "<reason>" }`
 	- `404` -> `{ "error": "Task not found." }`
 
-### `GET /api/health`
+### `GET /api/health` (also `HEAD`, `OPTIONS`)
 Service and queue health snapshot.
 
 - Body: none
