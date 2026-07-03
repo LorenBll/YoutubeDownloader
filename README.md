@@ -5,6 +5,10 @@ YoutubeDownloader is a local YouTube download service. It solves the problem of 
 ## About
 YoutubeDownloader is scoped to request validation, background download jobs, and file delivery on the local machine. The service binds to `127.0.0.1` on port `49156`, keeps task state in memory, and uses a cleanup thread to remove finished jobs after a retention period.
 
+## Integration
+
+This service can optionally register with [PortHandler](https://www.github.com/LorenBll/PortHandler) for service discovery, but does not depend on it. Set `porthandlerEnabled` in `resources/configuration.json` to control this behavior.
+
 ## Setup
 1. Install the Python dependencies with `pip install -r requirements.txt`.
 2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
