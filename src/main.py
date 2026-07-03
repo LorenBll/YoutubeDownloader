@@ -1338,13 +1338,11 @@ def health() -> tuple[Any, int]:
             "service": "YoutubeDownloader",
             "bind_address": SERVICE_BIND_ADDRESS,
             "port": SERVICE_PORT,
+            "hostname": socket.gethostname(),
             "task_counts": counts,
             "task_retention_minutes": TASK_RETENTION_MINUTES,
             "task_cleanup_interval_seconds": TASK_CLEANUP_INTERVAL_SECONDS,
             "youtube_client": YOUTUBE_CLIENT_NAME,
-            "hostname": socket.gethostname(),
-            "primary_ip": _get_primary_ip(),
-            "local_ips": _collect_local_ip_addresses(),
         }
     )
 

@@ -129,6 +129,7 @@ Service and queue health snapshot.
 			"service": "YoutubeDownloader",
 			"bind_address": "127.0.0.1",
 			"port": 49156,
+			"hostname": "...",
 			"task_counts": {
 				"queued": 0,
 				"in_progress": 0,
@@ -138,10 +139,7 @@ Service and queue health snapshot.
 			},
 			"task_retention_minutes": 60,
 			"task_cleanup_interval_seconds": 60,
-			"youtube_client": "WEB",
-			"hostname": "...",
-			"primary_ip": "...",
-			"local_ips": ["..."]
+			"youtube_client": "WEB"
 		}
 		```
 
