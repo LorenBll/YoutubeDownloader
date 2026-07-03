@@ -22,9 +22,15 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 2. Unix-like systems: run `bash scripts/run.sh`.
 3. Manual: run `python src/main.py` from the project root.
 
+## Access Control
+
+All `/api/*` endpoints are local-device only. Requests from non-local addresses are rejected with:
+- `403` -> `{ "error": "Local device access only." }`
+
 ## API Endpoints
 
 All endpoints also support `HEAD` and `OPTIONS`.
+- API responses use `Connection: close` (non-persistent connections).
 
 ### `POST /api/download` (also `HEAD`, `OPTIONS`)
 Queues a single or batch download task and returns a task ID.
