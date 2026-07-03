@@ -10,7 +10,7 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 This service can optionally register with [PortHandler](https://www.github.com/LorenBll/PortHandler) for service discovery, but does not depend on it. Set `porthandlerEnabled` in `resources/configuration.json` to control this behavior.
 
 ## Setup
-1. Install the Python dependencies with `pip install -r requirements.txt`.
+1. `pip install -r requirements.txt`
 2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
 3. Review `resources/configuration.json` to configure `port`, `allowed_roots`, and `blacklisted_roots`.
 		- `allowed_roots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
@@ -30,11 +30,10 @@ This service can optionally register with [PortHandler](https://www.github.com/L
 
 All `/api/*` endpoints are local-device only. Requests from non-local addresses are rejected with:
 - `403` -> `{ "error": "Local device access only." }`
+- All endpoints also support `HEAD` and `OPTIONS`.
+- API responses use `Connection: close` (non-persistent connections).
 
 ## API Endpoints
-
-All endpoints also support `HEAD` and `OPTIONS`.
-- API responses use `Connection: close` (non-persistent connections).
 
 ### `POST /api/download` (also `HEAD`, `OPTIONS`)
 Queues a single or batch download task and returns a task ID.
