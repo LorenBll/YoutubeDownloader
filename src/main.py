@@ -1131,11 +1131,13 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
 # ============================================================================
 
 
-@app.route("/api/download", methods=["POST", "OPTIONS"])
+@app.route("/api/download", methods=["POST", "HEAD", "OPTIONS"])
 def download() -> tuple[Any, int]:
     """Queue a download task. Returns task_id (202 Accepted)."""
     if request.method == "OPTIONS":
-        return _options_response(["POST", "OPTIONS"])
+        return _options_response(["POST", "HEAD", "OPTIONS"])
+    if request.method == "HEAD":
+        return _head_response()
 
     # Ensure background cleanup thread is running
     _ensure_cleanup_thread_started()

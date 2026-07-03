@@ -24,9 +24,9 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 
 ## API Endpoints
 
-All endpoints also support `OPTIONS`; `GET` endpoints additionally support `HEAD`.
+All endpoints also support `HEAD` and `OPTIONS`.
 
-### `POST /api/download` (also `OPTIONS`)
+### `POST /api/download` (also `HEAD`, `OPTIONS`)
 Queues a single or batch download task and returns a task ID.
 
 - Body (JSON object):
