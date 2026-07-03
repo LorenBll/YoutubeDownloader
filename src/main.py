@@ -21,6 +21,8 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, request
 
+from models import PostResponse, PostRequest
+
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "resources" / "configuration.json"
@@ -267,6 +269,35 @@ def _head_response() -> tuple:
     """Return a HEAD response with no body."""
     response = jsonify({})
     return response, 200
+
+
+def _error_response(message: str, status_code: int = 400, **extra) -> tuple:
+    """Return a JSON error response using PostResponse model."""
+    data = {"error": message, **extra}
+    body = json.dumps(data)
+    resp = PostResponse(
+        status_code=status_code,
+        reason="error",
+        body=body,
+        body_size=len(body),
+        headers={"Content-Type": "application/json"},
+        json_body=data,
+    )
+    return jsonify(resp.json_body), resp.status_code
+
+
+def _success_response(data: dict, status_code: int = 200) -> tuple:
+    """Return a JSON success response using PostResponse model."""
+    body = json.dumps(data)
+    resp = PostResponse(
+        status_code=status_code,
+        reason="OK",
+        body=body,
+        body_size=len(body),
+        headers={"Content-Type": "application/json"},
+        json_body=data,
+    )
+    return jsonify(resp.json_body), resp.status_code
 
 
 jobs_lock = Lock()
@@ -1113,7 +1144,9 @@ def download() -> tuple[Any, int]:
     payload = request.get_json(silent=True)
     validated_payload, error_body, status_code = _validate_payload(payload)
     if error_body is not None:
-        return jsonify(error_body), status_code
+        msg = error_body.get("error", "Invalid request")
+        extra = {k: v for k, v in error_body.items() if k != "error"}
+        return _error_response(msg, status_code, **extra)
 
     # Generate unique task ID and create task record
     task_id = str(uuid4())
@@ -1122,7 +1155,7 @@ def download() -> tuple[Any, int]:
     with jobs_lock:
         jobs[task_id] = {
             "task_id": task_id,
-            "status": "queued",  # Initial status
+            "status": "queued",
             "created_at": now,
             "updated_at": now,
         }
@@ -1133,37 +1166,29 @@ def download() -> tuple[Any, int]:
             target=_download_worker,
             args=(task_id, validated_payload),
             name=f"youtube-download-worker-{task_id}",
-            daemon=False,  # Not a daemon - we want downloads to complete even during shutdown
+            daemon=False,
         )
         download_thread.start()
     except Exception as exc:
-        # Failed to start worker thread - mark task as failed
         with jobs_lock:
             jobs[task_id]["status"] = "failed"
             jobs[task_id]["error"] = f"Failed to start download worker: {exc}"
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
-        return (
-            jsonify(
-                {
-                    "error": "Could not start download worker. The server may be under heavy load.",
-                    "task_id": task_id,
-                }
-            ),
+        return _error_response(
+            "Could not start download worker. The server may be under heavy load.",
             500,
+            task_id=task_id,
         )
 
-    # Build response with task information
     response_body: dict[str, Any] = {
         "task_id": task_id,
         "status": "queued",
     }
-    # For batch requests, include count of videos
     if isinstance(validated_payload.get("videos"), list):
         response_body["video_count"] = len(validated_payload["videos"])
 
-    # Return 202 Accepted (task is queued, not yet completed)
-    return jsonify(response_body), 202
+    return _success_response(response_body, 202)
 
 
 @app.route("/api/task/<task_id>", methods=["GET", "HEAD", "OPTIONS"])
@@ -1182,23 +1207,20 @@ def task_status(task_id: str) -> tuple[Any, int]:
         task = jobs.get(task_id)
 
     if task is None:
-        return jsonify({"error": "Task not found."}), 404
+        return _error_response("Task not found.", 404)
 
-    # Build response with task information
     response_body: dict[str, Any] = {
         "task_id": task["task_id"],
         "status": task["status"],
     }
 
-    # Include result details if task completed successfully
     if task["status"] == "completed":
         response_body["result"] = task.get("result", {})
 
-    # Include error message if task failed
     if task["status"] == "failed":
         response_body["error"] = task.get("error", "Unknown error")
 
-    return jsonify(response_body), 200
+    return _success_response(response_body)
 
 
 @app.route("/api/health", methods=["GET", "HEAD", "OPTIONS"])
@@ -1229,24 +1251,20 @@ def health() -> tuple[Any, int]:
         if status in counts:
             counts[status] += 1
 
-    # Return health status with detailed service information
-    return (
-        jsonify(
-            {
-                "status": "ok",
-                "service": "YoutubeDownloader",
-                "bind_address": SERVICE_BIND_ADDRESS,
-                "port": SERVICE_PORT,
-                "task_counts": counts,
-                "task_retention_minutes": TASK_RETENTION_MINUTES,
-                "task_cleanup_interval_seconds": TASK_CLEANUP_INTERVAL_SECONDS,
-                "youtube_client": YOUTUBE_CLIENT_NAME,
-                "hostname": socket.gethostname(),
-                "primary_ip": _get_primary_ip(),
-                "local_ips": _collect_local_ip_addresses(),
-            }
-        ),
-        200,
+    return _success_response(
+        {
+            "status": "ok",
+            "service": "YoutubeDownloader",
+            "bind_address": SERVICE_BIND_ADDRESS,
+            "port": SERVICE_PORT,
+            "task_counts": counts,
+            "task_retention_minutes": TASK_RETENTION_MINUTES,
+            "task_cleanup_interval_seconds": TASK_CLEANUP_INTERVAL_SECONDS,
+            "youtube_client": YOUTUBE_CLIENT_NAME,
+            "hostname": socket.gethostname(),
+            "primary_ip": _get_primary_ip(),
+            "local_ips": _collect_local_ip_addresses(),
+        }
     )
 
 
