@@ -1352,16 +1352,35 @@ def health() -> tuple[Any, int]:
 # ============================================================================
 
 
-def _register_with_porthandler() -> None:
+def _porthandler_keepalive_forever() -> None:
     global PORTHANDLER_HASH
     config = _load_configuration()
     ph_port = config.get("porthandlerPort", 49155)
+    service_name = "YoutubeDownloader"
 
-    for attempt in range(3):
+    while True:
         time.sleep(15)
         try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{ph_port}/api/question",
+                data=json.dumps({"name": service_name}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    continue
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                logger.warning(f"PortHandler question failed (HTTP {exc.code})")
+                continue
+        except Exception as exc:
+            logger.warning(f"PortHandler question failed: {exc}")
+            continue
+
+        try:
             payload = json.dumps({
-                "name": "YoutubeDownloader",
+                "name": service_name,
                 "port": SERVICE_PORT,
                 "starting_script": str(Path(__file__).resolve().parent.parent / "scripts" / ("run.bat" if os.name == "nt" else "run.sh")),
                 "pid": os.getpid(),
@@ -1379,12 +1398,8 @@ def _register_with_porthandler() -> None:
                     data = json.loads(resp.read().decode("utf-8"))
                     PORTHANDLER_HASH = data.get("hash")
                     logger.info(f"Registered with PortHandler, hash={PORTHANDLER_HASH[:16]}...")
-                    return
-
         except Exception as exc:
-            logger.warning(f"PortHandler registration attempt {attempt + 1}/3 failed: {exc}")
-
-    logger.warning("PortHandler registration failed after 3 attempts, starting without registration")
+            logger.warning(f"PortHandler registration attempt failed: {exc}")
 
 
 if __name__ == "__main__":
@@ -1402,12 +1417,12 @@ if __name__ == "__main__":
 
     config = _load_configuration()
     if config.get("porthandlerEnabled", True):
-        registration_thread = Thread(
-            target=_register_with_porthandler,
-            name="porthandler-registration",
+        porthandler_thread = Thread(
+            target=_porthandler_keepalive_forever,
+            name="porthandler-keepalive",
             daemon=True,
         )
-        registration_thread.start()
+        porthandler_thread.start()
 
     try:
         logger.info("=" * 50)
