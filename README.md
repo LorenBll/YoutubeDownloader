@@ -10,21 +10,30 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 This service can optionally register with [PortHandler](https://www.github.com/LorenBll/PortHandler) for service discovery, but does not depend on it. Set `porthandlerEnabled` in `resources/configuration.json` to control this behavior.
 
 ## Setup
-1. `pip install -r requirements.txt`
-2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
-3. Review `resources/configuration.json` to configure `port`, `allowed_roots`, and `blacklisted_roots`.
+1. Windows: run `scripts\setup.bat` or Unix: run `bash scripts/setup.sh` (creates a virtual environment, installs dependencies, checks configuration).
+2. Manual: `pip install -r requirements.txt` after creating a virtual environment.
+3. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
+4. Review `resources/configuration.json` to configure `port`, `porthandlerEnabled`, `porthandlerPort`, `allowed_roots`, and `blacklisted_roots`.
 		- `allowed_roots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
 		- `blacklisted_roots`: list of root paths that are forbidden when `allowed_roots` is empty. If `allowed_roots` is empty and `blacklisted_roots` is non-empty, any path inside a blacklisted root is forbidden.
 		- Behavior summary:
 			- If `allowed_roots` is non-empty → only those roots are permitted (blacklist ignored).
 			- Else if `blacklisted_roots` is non-empty → all paths are permitted except any inside a blacklisted root.
 			- Else (both lists empty) → all paths on the system are permitted.
-4. Leave the project structure intact so the service can find `resources/` and `src/`.
+5. Leave the project structure intact so the service can find `resources/` and `src/`.
 
 ## Run
 1. Windows: run `scripts\run.bat`.
 2. Unix-like systems: run `bash scripts/run.sh`.
 3. Manual: run `python src/main.py` from the project root.
+
+## Deployment / Auto-start
+
+The `deployment/` directory contains platform-specific startup configurations:
+
+- `startup-windows.vbs` — Windows startup script (place in `shell:startup`)
+- `com.service.plist` — macOS launchd service definition
+- `service.service` — Linux systemd service unit
 
 ## Access Control
 
@@ -40,7 +49,7 @@ Queues a single or batch download task and returns a task ID.
 
 - Body (JSON object):
 	- Single-download mode (required fields):
-		- `video_link` (string, required): valid YouTube URL (`youtube.com` or `youtu.be`), playlists are rejected.
+		- `video_link` (string, required): valid YouTube URL (`youtube.com`, `youtu.be`, or `m.youtube.com`), playlists are rejected.
 		- `format` (string, required): `mp4` or `mp3`.
 		- `quality` (string, required):
 			- mp4: values like `720`, `720p`, `1080`, `1080p`
@@ -136,9 +145,9 @@ Service and queue health snapshot.
 				"failed": 0,
 				"total": 0
 			},
-			"task_retention_minutes": 60,
+			"task_retention_minutes": 30,
 			"task_cleanup_interval_seconds": 60,
-			"youtube_client": "WEB"
+			"youtube_client": "pytubefix|pytube"
 		}
 		```
 
