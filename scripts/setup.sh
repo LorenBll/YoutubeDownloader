@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Set up YouTube Downloader on macOS or Linux.
+# Set up YoutubeDownloader on macOS or Linux.
 
 set -euo pipefail
 
@@ -49,7 +49,7 @@ echo "Dependencies installed."
 
 # Check configuration.
 if [ ! -f "resources/configuration.json" ]; then
-  echo "WARNING: Create resources/configuration.json before running YouTube Downloader."
+  echo "WARNING: Create resources/configuration.json before running YoutubeDownloader."
 fi
 
 echo ""

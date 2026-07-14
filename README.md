@@ -151,6 +151,8 @@ Service and queue health snapshot.
 		}
 		```
 
+---
+
 ## License
 - [LICENSE](LICENSE)
 

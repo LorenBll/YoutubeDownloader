@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Start YouTube Downloader.
+# Start YoutubeDownloader.
 
 set -euo pipefail
 
@@ -45,6 +45,6 @@ python -m pip install --quiet --upgrade pip
 python -m pip install --quiet -r requirements.txt
 [ $VERBOSE -eq 1 ] && echo "Dependencies installed."
 
-# Start YouTube Downloader.
-[ $VERBOSE -eq 1 ] && echo "" && echo "YouTube Downloader starting..." && echo ""
+# Start YoutubeDownloader.
+[ $VERBOSE -eq 1 ] && echo "" && echo "YoutubeDownloader starting..." && echo ""
 python src/main.py
