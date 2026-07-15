@@ -153,6 +153,9 @@ Service and queue health snapshot.
 
 ---
 
+## Support
+- Open an issue on [GitHub](https://github.com/LorenBll/YoutubeDownloader/issues) for bug reports, feature requests, or help.
+
 ## License
 - [LICENSE](LICENSE)
 
