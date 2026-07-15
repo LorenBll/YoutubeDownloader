@@ -7,7 +7,7 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 
 ## Integration
 
-This service can optionally register with [PortHandler](https://www.github.com/LorenBll/PortHandler) for service discovery, but does not depend on it. Set `porthandlerEnabled` in `resources/configuration.json` to control this behavior.
+This service can optionally register with [ServiceHandler](https://www.github.com/LorenBll/ServiceHandler) for service discovery, but does not depend on it. Set `porthandlerEnabled` in `resources/configuration.json` to control this behavior.
 
 ## Setup
 1. Windows: run `scripts\setup.bat` or Unix: run `bash scripts/setup.sh` (creates a virtual environment, installs dependencies, checks configuration).
