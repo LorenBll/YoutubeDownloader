@@ -40,13 +40,14 @@ The `deployment/` directory contains platform-specific startup configurations:
 All `/api/*` endpoints are local-device only. Requests from non-local addresses are rejected with:
 - `403` -> `{ "error": "Local device access only." }`
 - All endpoints also support `HEAD` and `OPTIONS`.
-- API responses use `Connection: close` (non-persistent connections).
+- API responses use `Connection: close`.
 
 ## API Endpoints
 
 ### `POST /api/download` (also `HEAD`, `OPTIONS`)
 Queues a single or batch download task and returns a task ID.
 
+- Auth: local-device only (no API key required)
 - Body (JSON object):
 	- Single-download mode (required fields):
 		- `video_link` (string, required): valid YouTube URL (`youtube.com`, `youtu.be`, or `m.youtube.com`), playlists are rejected.
@@ -88,6 +89,7 @@ Queues a single or batch download task and returns a task ID.
 ### `GET /api/task/<task_id>` (also `HEAD`, `OPTIONS`)
 Returns current task status and final result/error.
 
+- Auth: local-device only (no API key required)
 - Path parameters:
 	- `task_id` (string, required): task identifier returned by `POST /api/download`.
 - Returns:
@@ -128,6 +130,7 @@ Returns current task status and final result/error.
 ### `GET /api/health` (also `HEAD`, `OPTIONS`)
 Service and queue health snapshot.
 
+- Auth: local-device only (no API key required)
 - Body: none
 - Returns:
 	- `200` ->
