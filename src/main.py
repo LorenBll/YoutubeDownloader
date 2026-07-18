@@ -96,8 +96,15 @@ except (ValueError, TypeError):
 # ============================================================================
 
 
+_CONFIG_CACHE: dict[str, Any] | None = None
+
+
 def _load_configuration() -> dict[str, Any]:
-    """Load configuration from resources/configuration.json."""
+    """Load configuration from resources/configuration.json (cached after first call)."""
+    global _CONFIG_CACHE
+    if _CONFIG_CACHE is not None:
+        return _CONFIG_CACHE
+
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(
             "Configuration file not found. Ensure resources/configuration.json exists."
@@ -111,6 +118,7 @@ def _load_configuration() -> dict[str, Any]:
     except Exception as exc:
         raise RuntimeError("Failed to read configuration file") from exc
 
+    _CONFIG_CACHE = config
     return config
 
 
@@ -227,13 +235,8 @@ def _is_ipv4_address(value: object) -> bool:
     """Check whether a value is a valid IPv4 address string."""
     if not isinstance(value, str):
         return False
-
-    parts = value.strip().split(".")
-    if len(parts) != 4:
-        return False
-
     try:
-        return all(0 <= int(part) <= 255 for part in parts)
+        return isinstance(ipaddress.ip_address(value.strip()), ipaddress.IPv4Address)
     except ValueError:
         return False
 
@@ -425,12 +428,14 @@ def _normalize_quality(quality: str, requested_format: str) -> str:
     return quality.strip()
 
 
+_FILENAME_TRANSLATE_TABLE = str.maketrans(
+    {c: "_" for c in r'<>:"/\|?*&'}
+)
+
+
 def _build_safe_filename(file_name: str) -> str:
     """Sanitize filename for safe filesystem operations."""
-    cleaned = file_name.strip()
-    invalid_chars = r'<>:"/\|?*&'
-    for char in invalid_chars:
-        cleaned = cleaned.replace(char, "_")
+    cleaned = file_name.strip().translate(_FILENAME_TRANSLATE_TABLE)
     cleaned = "".join(char for char in cleaned if ord(char) >= 32 or char in "\t\n\r")
     cleaned = " ".join(cleaned.split())
     if not cleaned:
@@ -467,19 +472,19 @@ def _resolve_unique_path(directory: Path, stem: str, suffix: str) -> Path:
         counter += 1
 
 
+_VALID_YOUTUBE_HOSTS = frozenset({
+    "youtube.com", "www.youtube.com",
+    "youtu.be", "www.youtu.be",
+    "m.youtube.com",
+})
+
+
 def _is_valid_youtube_url(video_link: str) -> bool:
     """Validate YouTube URL format."""
     link = video_link.strip().lower()
     parsed = urlparse(link)
     hostname = parsed.hostname or ""
-    valid_hosts = {
-        "youtube.com",
-        "www.youtube.com",
-        "youtu.be",
-        "www.youtu.be",
-        "m.youtube.com",
-    }
-    if not any(hostname.endswith(host.replace("www.", "")) for host in valid_hosts):
+    if hostname not in _VALID_YOUTUBE_HOSTS:
         return False
     return bool(parsed.path.strip("/") or parsed.query)
 
@@ -545,28 +550,32 @@ def _ensure_cleanup_thread_started() -> None:
 # ============================================================================
 
 
-def _select_progressive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[int, Any]:
-    """Select best progressive MP4 stream (up to 720p)."""
+def _select_best_stream(
+    yt: Any,
+    normalized_quality: str,
+    stream_type: str,
+    **filter_kwargs: Any,
+) -> tuple[int, Any]:
+    """Shared stream selection: filter, order by resolution desc, pick best match <= requested."""
     requested_height = _resolution_to_int(normalized_quality)
     if requested_height is None:
         raise ValueError(
-            "For mp4, quality must be a value like '720p' (or numeric like '720')."
+            f"For mp4, quality must be a value like '720p' (or numeric like '720')."
         )
 
     try:
         candidate_streams = list(
-            yt.streams.filter(progressive=True, file_extension="mp4")
+            yt.streams.filter(**filter_kwargs)
             .order_by("resolution")
             .desc()
         )
     except HTTPError as exc:
         raise ValueError(
-            "YouTube request failed while fetching available mp4 streams. "
+            f"YouTube request failed while fetching available {stream_type} mp4 streams. "
             "Try again later or test another video. "
             f"Upstream error: HTTP {exc.code}."
         ) from exc
 
-    # Build list of available resolutions with their stream objects
     available: list[tuple[int, Any]] = []
     for candidate in candidate_streams:
         height = _resolution_to_int(getattr(candidate, "resolution", None))
@@ -574,46 +583,26 @@ def _select_progressive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[in
             available.append((height, candidate))
 
     if not available:
-        raise ValueError("No mp4 progressive streams are available for this video.")
+        raise ValueError(f"No {stream_type} mp4 streams are available for this video.")
 
     available.sort(key=lambda item: item[0], reverse=True)
     return next(((h, s) for h, s in available if h <= requested_height), available[-1])
+
+
+def _select_progressive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[int, Any]:
+    """Select best progressive MP4 stream (up to 720p)."""
+    return _select_best_stream(
+        yt, normalized_quality, "progressive",
+        progressive=True, file_extension="mp4",
+    )
 
 
 def _select_adaptive_mp4_stream(yt: Any, normalized_quality: str) -> tuple[int, Any]:
     """Select best adaptive MP4 video stream (>720p, no audio)."""
-
-    # Parse requested quality to integer height
-    requested_height = _resolution_to_int(normalized_quality)
-    if requested_height is None:
-        raise ValueError(
-            "For mp4, quality must be a value like '1080p' (or numeric like '1080')."
-        )
-
-    try:
-        candidate_streams = list(
-            yt.streams.filter(adaptive=True, only_video=True, file_extension="mp4")
-            .order_by("resolution")
-            .desc()
-        )
-    except HTTPError as exc:
-        raise ValueError(
-            "YouTube request failed while fetching available adaptive mp4 streams. "
-            "Try again later or test another video. "
-            f"Upstream error: HTTP {exc.code}."
-        ) from exc
-
-    available: list[tuple[int, Any]] = []
-    for candidate in candidate_streams:
-        height = _resolution_to_int(getattr(candidate, "resolution", None))
-        if height is not None:
-            available.append((height, candidate))
-
-    if not available:
-        raise ValueError("No adaptive mp4 video streams are available for this video.")
-
-    available.sort(key=lambda item: item[0], reverse=True)
-    return next(((h, s) for h, s in available if h <= requested_height), available[-1])
+    return _select_best_stream(
+        yt, normalized_quality, "adaptive",
+        adaptive=True, only_video=True, file_extension="mp4",
+    )
 
 
 def _select_best_audio_stream_for_mp4(yt: Any) -> Any:
