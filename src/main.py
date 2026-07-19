@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, request
 
-from models import PostResponse
+from models import PostResponse, PostRequest
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,64 @@ def _is_path_permitted(path: Path) -> bool:
     return True
 
 
+def _collect_local_ip_addresses() -> list[str]:
+    """Gather the IPv4 addresses resolved for the local machine."""
+    addresses: set[str] = {"127.0.0.1"}
+    hostnames = {socket.gethostname(), socket.getfqdn(), "localhost"}
 
+    for hostname in hostnames:
+        if not hostname:
+            continue
+
+        try:
+            _, _, resolved_addresses = socket.gethostbyname_ex(hostname)
+        except OSError:
+            resolved_addresses = []
+
+        for address in resolved_addresses:
+            if _is_ipv4_address(address):
+                addresses.add(address)
+
+        try:
+            for family, _, _, _, sockaddr in socket.getaddrinfo(hostname, None):
+                if family == socket.AF_INET and sockaddr:
+                    candidate = sockaddr[0]
+                    if _is_ipv4_address(candidate):
+                        addresses.add(candidate)
+        except OSError:
+            continue
+
+    return sorted(addresses, key=_sort_ip_address)
+
+
+def _is_ipv4_address(value: object) -> bool:
+    """Check whether a value is a valid IPv4 address string."""
+    if not isinstance(value, str):
+        return False
+    try:
+        return isinstance(ipaddress.ip_address(value.strip()), ipaddress.IPv4Address)
+    except ValueError:
+        return False
+
+
+def _sort_ip_address(value: str) -> tuple[int, int, int, int]:
+    """Sort IP addresses numerically while keeping loopback near the front."""
+    parts = value.split(".")
+    if len(parts) != 4:
+        return (255, 255, 255, 255)
+
+    try:
+        return tuple(int(part) for part in parts)  # type: ignore[return-value]
+    except ValueError:
+        return (255, 255, 255, 255)
+
+
+def _get_primary_ip() -> str:
+    """Return the first non-loopback IPv4 address, or loopback as a fallback."""
+    for address in _collect_local_ip_addresses():
+        if address != "127.0.0.1":
+            return address
+    return "127.0.0.1"
 
 
 app = Flask(__name__)
