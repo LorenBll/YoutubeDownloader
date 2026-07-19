@@ -386,6 +386,13 @@ def _build_safe_filename(file_name: str) -> str:
     return Path(cleaned).stem or "download"
 
 
+def _require_string(value: object, field_name: str) -> str:
+    """Validate that a value is a non-empty string."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value.strip()
+
+
 def _normalize_folder_path(folder: object) -> Path:
     """Normalize and validate the requested download folder path."""
     folder_value = _require_string(folder, "folder")
