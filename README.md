@@ -6,6 +6,10 @@ YoutubeDownloader is a local YouTube download service. It solves the problem of 
 
 YoutubeDownloader is scoped to request validation, background download jobs, and file delivery on the local machine. The service binds to `127.0.0.1` on port `49156` and rejects API calls that do not come from the local device. Task state is kept in memory, and a cleanup thread removes finished jobs after a configurable retention period.
 
+This service can optionally register with [ServiceHandler](https://www.github.com/LorenBll/ServiceHandler) for service discovery, but does not depend on it. Set `servicehandlerEnabled` in `resources/configuration.json` to control this behavior.
+
+**Features:**
+
 - **Single and Batch Downloads** — queue one or many video downloads in a single API call. Each video in a batch is processed independently.
 - **Adaptive Quality Selection** — supports progressive MP4 streams (up to 720p, video and audio combined) and adaptive MP4 streams (above 720p, requires ffmpeg for merging).
 - **MP3 Audio Extraction** — download audio-only streams at configurable bitrates (e.g. 128kbps, 160kbps).
@@ -18,31 +22,22 @@ YoutubeDownloader is scoped to request validation, background download jobs, and
 
 ## Setup
 
-1. Windows: run `scripts\setup.bat` or Unix: run `bash scripts/setup.sh` (creates a virtual environment, installs dependencies, checks configuration).
-2. Manual: `pip install -r requirements.txt` after creating a virtual environment.
-3. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
-4. Review `resources/configuration.json` to configure `port`, `servicehandlerEnabled`, `servicehandlerPort`, `allowed_roots`, and `blacklisted_roots`.
+1. Install Python dependencies: `pip install -r requirements.txt`.
+2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
+3. Review `resources/configuration.json` to configure `port`, `servicehandlerEnabled`, `servicehandlerPort`, `allowed_roots`, and `blacklisted_roots`.
    - `allowed_roots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
    - `blacklisted_roots`: list of root paths that are forbidden when `allowed_roots` is empty. If `allowed_roots` is empty and `blacklisted_roots` is non-empty, any path inside a blacklisted root is forbidden.
    - Behavior summary:
      - If `allowed_roots` is non-empty -> only those roots are permitted (blacklist ignored).
      - Else if `blacklisted_roots` is non-empty -> all paths are permitted except any inside a blacklisted root.
      - Else (both lists empty) -> all paths on the system are permitted.
-5. Leave the project structure intact so the service can find `resources/` and `src/`.
+4. Leave the project structure intact so the service can find `resources/` and `src/`.
 
 ## Run
 
 1. Windows: run `scripts\run.bat`.
 2. Unix-like systems: run `bash scripts/run.sh`.
 3. Manual: run `python src/main.py` from the project root.
-
-## Integration
-
-This service can optionally register with [ServiceHandler](https://www.github.com/LorenBll/ServiceHandler) for service discovery, but does not depend on it. Set `servicehandlerEnabled` in `resources/configuration.json` to control this behavior.
-
-When registered, YoutubeDownloader also registers its API endpoints with ServiceHandler so they can be discovered by other services.
-
-## Auto-Startup
 
 The `deployment/` directory contains platform-specific startup configurations:
 

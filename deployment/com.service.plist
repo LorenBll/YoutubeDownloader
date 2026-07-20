@@ -26,13 +26,5 @@
     
     <key>StandardErrorPath</key>
     <string>/tmp/youtube-downloader.error.log</string>
-    
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>TASK_RETENTION_MINUTES</key>
-        <string>30</string>
-        <key>TASK_CLEANUP_INTERVAL_SECONDS</key>
-        <string>60</string>
-    </dict>
 </dict>
 </plist>

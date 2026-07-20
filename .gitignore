@@ -40,5 +40,5 @@ nohup.out
 .coverage
 htmlcov/
 
-# Configuration (uncomment if you want to ignore config with API keys)
-# resources/configuration.json
+# Configuration (config may contain sensitive paths)
+resources/configuration.json
