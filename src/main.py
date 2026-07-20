@@ -1417,6 +1417,8 @@ def _servicehandler_keepalive_forever() -> None:
             )
             resp = _send_post_request(req)
             if resp.status_code == 200:
+                if not SERVICEHANDLER_HASH and isinstance(resp.json_body, dict):
+                    SERVICEHANDLER_HASH = resp.json_body.get("hash")
                 continue
             if resp.status_code != 404:
                 logger.warning(f"ServiceHandler question failed (HTTP {resp.status_code})")
