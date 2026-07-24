@@ -1457,7 +1457,7 @@ if __name__ == "__main__":
     try:
         logging.basicConfig(
             level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         )
         _initialize_service_config()
     except Exception as exc:
