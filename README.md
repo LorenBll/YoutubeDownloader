@@ -33,6 +33,13 @@ This service can optionally register with [ServiceHandler](https://www.github.co
      - Else (both lists empty) -> all paths on the system are permitted.
 4. Leave the project structure intact so the service can find `resources/` and `src/`.
 
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TASK_RETENTION_MINUTES` | `30` | Minutes before completed/failed tasks are removed. |
+| `TASK_CLEANUP_INTERVAL_SECONDS` | `60` | Seconds between task cleanup cycles. |
+
 ## Run
 
 1. Windows: run `scripts\run.bat`.
