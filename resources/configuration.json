@@ -2,6 +2,6 @@
   "port": 49156,
   "servicehandlerEnabled": true,
   "servicehandlerPort": 49155,
-  "allowed_roots": [],
-  "blacklisted_roots": []
+  "allowedRoots": [],
+  "blacklistedRoots": []
 }

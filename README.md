@@ -24,12 +24,12 @@ This service can optionally register with [ServiceHandler](https://www.github.co
 
 1. Install Python dependencies: `pip install -r requirements.txt`.
 2. Install `ffmpeg` if you want to merge adaptive MP4 streams above 720p.
-3. Review `resources/configuration.json` to configure `port`, `servicehandlerEnabled`, `servicehandlerPort`, `allowed_roots`, and `blacklisted_roots`.
-   - `allowed_roots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
-   - `blacklisted_roots`: list of root paths that are forbidden when `allowed_roots` is empty. If `allowed_roots` is empty and `blacklisted_roots` is non-empty, any path inside a blacklisted root is forbidden.
+3. Review `resources/configuration.json` to configure `port`, `servicehandlerEnabled`, `servicehandlerPort`, `allowedRoots`, and `blacklistedRoots`.
+   - `allowedRoots`: list of root paths the API is allowed to write downloads into. If this list is non-empty, ONLY these roots are permitted and the blacklist is ignored.
+   - `blacklistedRoots`: list of root paths that are forbidden when `allowedRoots` is empty. If `allowedRoots` is empty and `blacklistedRoots` is non-empty, any path inside a blacklisted root is forbidden.
    - Behavior summary:
-     - If `allowed_roots` is non-empty -> only those roots are permitted (blacklist ignored).
-     - Else if `blacklisted_roots` is non-empty -> all paths are permitted except any inside a blacklisted root.
+     - If `allowedRoots` is non-empty -> only those roots are permitted (blacklist ignored).
+     - Else if `blacklistedRoots` is non-empty -> all paths are permitted except any inside a blacklisted root.
      - Else (both lists empty) -> all paths on the system are permitted.
 4. Leave the project structure intact so the service can find `resources/` and `src/`.
 
@@ -42,9 +42,9 @@ This service can optionally register with [ServiceHandler](https://www.github.co
 
 ## Run
 
-1. Windows: run `scripts\run.bat`.
-2. Unix-like systems: run `bash scripts/run.sh`.
-3. Manual: run `python src/main.py` from the project root.
+1. Windows: run `scripts\run.bat` (add `--verbose` for debug output).
+2. Unix-like: run `bash scripts/run.sh` (add `--verbose` for debug output).
+3. Manual: run `python src/main.py` from the project root (add `--verbose` for debug output).
 
 The `deployment/` directory contains platform-specific startup configurations:
 
@@ -159,10 +159,13 @@ Service and queue health snapshot.
 ---
 
 ## Support
+
 - Open an issue on [GitHub](https://github.com/LorenBll/YoutubeDownloader/issues) for bug reports, feature requests, or help.
 
 ## License
+
 - [LICENSE](LICENSE)
 
 ## Author
+
 - [LorenBll](https://github.com/LorenBll)

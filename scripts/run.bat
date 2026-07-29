@@ -92,7 +92,7 @@ if %VERBOSE% equ 1 (
   echo.
   echo YoutubeDownloader starting...
   echo.
-  "%PYTHON_EXE%" src/main.py
+  "%PYTHON_EXE%" src/main.py --verbose
 ) else (
   start "" /B "%PYTHON_EXE%" src/main.py >nul 2>&1
   echo YoutubeDownloader started in background. Run 'run.bat --verbose' to see output.

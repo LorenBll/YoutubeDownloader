@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
+import functools
 import importlib
 import ipaddress
 import json
 import logging
 import os
-import socket
 import shutil
+import socket
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -159,8 +162,8 @@ def _initialize_service_config() -> None:
 
     repo_root = Path(__file__).resolve().parent.parent
 
-    allowed_roots: list[Path] = []
-    configured_allowed = config.get("allowed_roots")
+    allowedRoots: list[Path] = []
+    configured_allowed = config.get("allowedRoots")
     if isinstance(configured_allowed, list) and configured_allowed:
         for item in configured_allowed:
             if not isinstance(item, str) or not item.strip():
@@ -168,10 +171,10 @@ def _initialize_service_config() -> None:
             path = Path(item)
             if not path.is_absolute():
                 path = (repo_root / path).resolve(strict=False)
-            allowed_roots.append(path.resolve())
+            allowedRoots.append(path.resolve())
 
-    blacklisted_roots: list[Path] = []
-    configured_blacklisted = config.get("blacklisted_roots")
+    blacklistedRoots: list[Path] = []
+    configured_blacklisted = config.get("blacklistedRoots")
     if isinstance(configured_blacklisted, list) and configured_blacklisted:
         for item in configured_blacklisted:
             if not isinstance(item, str) or not item.strip():
@@ -179,10 +182,10 @@ def _initialize_service_config() -> None:
             path = Path(item)
             if not path.is_absolute():
                 path = (repo_root / path).resolve(strict=False)
-            blacklisted_roots.append(path.resolve())
+            blacklistedRoots.append(path.resolve())
 
-    ALLOWED_ROOTS = allowed_roots
-    BLACKLISTED_ROOTS = blacklisted_roots
+    ALLOWED_ROOTS = allowedRoots
+    BLACKLISTED_ROOTS = blacklistedRoots
 
 
 def _is_path_permitted(path: Path) -> bool:
@@ -199,7 +202,6 @@ def _is_path_permitted(path: Path) -> bool:
         return not _is_within_any_directory(resolved, BLACKLISTED_ROOTS)
 
     return True
-
 
 
 
@@ -330,6 +332,24 @@ jobs: dict[str, dict[str, Any]] = {}
 
 cleanup_lock = Lock()
 cleanup_thread_started = False
+
+
+# ============================================================================
+# STANDARD ENDPOINT DECORATOR
+# ============================================================================
+
+
+def standard_endpoint(*methods: str):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if request.method == "OPTIONS":
+                return _options_response(list(methods))
+            if request.method == "HEAD":
+                return _head_response()
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # ============================================================================
@@ -602,30 +622,28 @@ def _merge_av_with_ffmpeg(
     ffmpeg_path: str, video_path: Path, audio_path: Path, output_path: Path
 ) -> None:
     """Merge video and audio streams using FFmpeg."""
-    # Build ffmpeg command with appropriate parameters
     command = [
         ffmpeg_path,
-        "-y",  # Overwrite output without asking
+        "-y",
         "-i",
-        str(video_path),  # Input video
+        str(video_path),
         "-i",
-        str(audio_path),  # Input audio
+        str(audio_path),
         "-c:v",
-        "copy",  # Copy video codec (no re-encoding)
+        "copy",
         "-c:a",
-        "aac",  # Encode audio as AAC
+        "aac",
         "-movflags",
-        "+faststart",  # Web-optimized MP4
-        str(output_path),  # Output file
+        "+faststart",
+        str(output_path),
     ]
 
-    # Execute ffmpeg and handle potential errors
     try:
         completed = subprocess.run(
             command,
-            check=True,  # Raise exception on non-zero exit
-            capture_output=True,  # Capture stdout/stderr
-            text=True,  # Return strings, not bytes
+            check=True,
+            capture_output=True,
+            text=True,
         )
     except FileNotFoundError as exc:
         raise ValueError(
@@ -633,7 +651,6 @@ def _merge_av_with_ffmpeg(
             "Install ffmpeg or set FFMPEG_PATH."
         ) from exc
     except subprocess.CalledProcessError as exc:
-        # FFmpeg failed - extract error details from stderr
         stderr = exc.stderr.strip() if exc.stderr else ""
         message = "ffmpeg failed while merging audio and video streams."
         if stderr:
@@ -644,7 +661,6 @@ def _merge_av_with_ffmpeg(
 def _select_audio_stream(yt: Any, normalized_quality: str) -> Any:
     """Select audio stream matching requested bitrate."""
     try:
-        # Search for audio streams with the exact requested bitrate
         stream = (
             yt.streams.filter(only_audio=True, abr=normalized_quality)
             .order_by("abr")
@@ -658,7 +674,6 @@ def _select_audio_stream(yt: Any, normalized_quality: str) -> Any:
             f"Upstream error: HTTP {exc.code}."
         ) from exc
 
-    # Verify we found a matching stream
     if stream is None:
         raise ValueError(f"No audio stream found for quality '{normalized_quality}'.")
 
@@ -672,21 +687,17 @@ def _select_audio_stream(yt: Any, normalized_quality: str) -> Any:
 
 def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
     """Download video or audio and return metadata."""
-    # Extract and normalize request parameters
     video_link = payload["video_link"].strip()
     requested_format = payload["format"].strip().lower()
     quality = payload["quality"].strip()
     requested_name = str(payload.get("name", payload.get("file_name", ""))).strip()
     folder = payload["folder"].strip()
 
-    # Validate format
     if requested_format not in ALLOWED_FORMATS:
         raise ValueError("format must be either 'mp4' or 'mp3'")
 
-    # Normalize quality string for stream lookup
     normalized_quality = _normalize_quality(quality, requested_format)
 
-    # Validate and create save directory if it doesn't exist
     try:
         save_dir = _normalize_folder_path(folder)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -698,24 +709,20 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
     except (ValueError, TypeError) as exc:
         raise ValueError(str(exc)) from exc
 
-    # Initialize YouTube client for this video
     try:
         yt = YouTubeClient(video_link)
     except (HTTPError, Exception) as exc:
-        # Handle HTTP errors separately for better diagnostics
         if isinstance(exc, HTTPError):
             raise ValueError(
                 "YouTube request failed while preparing the download. "
                 "This may be temporary or related to pytube parsing for this video. "
                 f"Upstream error: HTTP {exc.code}."
             ) from exc
-        # Generic error (invalid URL, network issues, etc.)
         raise ValueError(
             f"Failed to load YouTube video. The URL may be invalid or the video unavailable. "
             f"Details: {exc}"
         ) from exc
 
-    # Fetch video title (will be used as filename if user didn't provide one)
     try:
         video_title = yt.title
     except HTTPError as exc:
@@ -725,41 +732,27 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
             f"Upstream error: HTTP {exc.code}."
         ) from exc
 
-    # Determine final filename (user-provided name takes priority)
     save_name = requested_name if requested_name else video_title
-    safe_stem = _build_safe_filename(save_name)  # Sanitize for filesystem
+    safe_stem = _build_safe_filename(save_name)
 
-    # ========================================================================
-    # MP4 VIDEO DOWNLOAD LOGIC
-    # ========================================================================
     if requested_format == "mp4":
-        # Parse and validate quality for video
         requested_height = _resolution_to_int(normalized_quality)
         if requested_height is None:
             raise ValueError(
                 "For mp4, quality must be a value like '720p' (or numeric like '720')."
             )
 
-        # Decide stream type based on quality:
-        # - Progressive (video+audio combined): Up to 720p
-        # - Adaptive (separate video/audio): Above 720p or if progressive unavailable
         use_adaptive = requested_height > 720
         if not use_adaptive:
-            # Try progressive first for ≤720p
             try:
                 selected_height, stream = _select_progressive_mp4_stream(
                     yt, normalized_quality
                 )
             except ValueError:
-                # Progressive not available, fall back to adaptive
                 use_adaptive = True
 
-        # ------------------------------------------------------------------------
-        # PROGRESSIVE MP4 DOWNLOAD (≤720p, simpler single-file download)
-        # ------------------------------------------------------------------------
         if not use_adaptive:
             try:
-                # Generate unique filename and download stream
                 output_path = _resolve_unique_path(save_dir, safe_stem, ".mp4")
                 output_path = Path(
                     stream.download(
@@ -782,7 +775,6 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                     f"Unexpected error downloading mp4 stream: {exc}"
                 ) from exc
 
-            # Return metadata about successful progressive download
             return {
                 "name": output_path.stem,
                 "format": "mp4",
@@ -791,43 +783,31 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 "save_path": str(output_path),
             }
 
-        # ------------------------------------------------------------------------
-        # ADAPTIVE MP4 DOWNLOAD (>720p, requires ffmpeg merge)
-        # ------------------------------------------------------------------------
-
-        # Locate ffmpeg executable (required for merging)
         ffmpeg_path = _resolve_ffmpeg_path()
 
-        # Select video and audio streams
         selected_height, video_stream = _select_adaptive_mp4_stream(
             yt, normalized_quality
         )
         audio_stream = _select_best_audio_stream_for_mp4(yt)
 
-        # Download video and audio to temporary directory, then merge
         try:
             with tempfile.TemporaryDirectory(prefix="yt-downloader-") as temp_dir:
                 temp_dir_path = Path(temp_dir)
 
-                # Download video stream
                 video_path = Path(
                     video_stream.download(
                         output_path=str(temp_dir_path), filename="video.mp4"
                     )
                 )
 
-                # Download audio stream
                 audio_path = Path(
                     audio_stream.download(
                         output_path=str(temp_dir_path), filename="audio.m4a"
                     )
                 )
 
-                # Merge video and audio using ffmpeg
                 output_path = _resolve_unique_path(save_dir, safe_stem, ".mp4")
                 _merge_av_with_ffmpeg(ffmpeg_path, video_path, audio_path, output_path)
-
-                # Temporary directory is automatically cleaned up when exiting context
 
         except HTTPError as exc:
             raise ValueError(
@@ -845,24 +825,17 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Unexpected error downloading high-quality mp4 stream: {exc}"
             ) from exc
 
-        # Return metadata about successful adaptive download
         return {
             "name": output_path.stem,
             "format": "mp4",
             "requested_quality": normalized_quality,
             "actual_quality": f"{selected_height}p",
             "save_path": str(output_path),
-            "merge": "ffmpeg",  # Indicate that ffmpeg was used for merging
+            "merge": "ffmpeg",
         }
 
-    # ========================================================================
-    # MP3 AUDIO DOWNLOAD LOGIC
-    # ========================================================================
-
-    # Select audio stream matching requested bitrate
     stream = _select_audio_stream(yt, normalized_quality)
 
-    # Download audio stream
     try:
         target_path = _resolve_unique_path(save_dir, safe_stem, ".mp3")
         downloaded_path = Path(
@@ -882,7 +855,6 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         raise ValueError(f"Unexpected error downloading audio stream: {exc}") from exc
 
-    # Ensure file is in the correct location (sometimes pytube may use a different path)
     if downloaded_path != target_path and downloaded_path.exists():
         try:
             downloaded_path.replace(target_path)
@@ -892,7 +864,6 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Details: {exc}"
             ) from exc
 
-    # Return metadata about successful audio download
     return {
         "name": target_path.stem,
         "format": "mp3",
@@ -906,23 +877,18 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, int]:
     """Validate download request payload (single or batch)."""
-    # Basic type check
     if not isinstance(payload, dict):
         return None, {"error": "Request body must be valid JSON."}, 400
 
-    # Check if this is a batch request (with 'videos' array)
     videos_payload = payload.get("videos")
     if videos_payload is not None:
-        # Validate batch request structure
         if not isinstance(videos_payload, list) or not videos_payload:
             return None, {"error": "videos must be a non-empty array."}, 400
 
-        # Validate each video in the batch
         video_errors: list[dict[str, Any]] = []
         validated_videos: list[dict[str, Any]] = []
 
         for index, video_payload in enumerate(videos_payload):
-            # Each item must be a dictionary
             if not isinstance(video_payload, dict):
                 video_errors.append(
                     {
@@ -932,7 +898,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Check for required fields
             missing_fields = [
                 field
                 for field in REQUIRED_FIELDS
@@ -948,7 +913,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Validate format
             requested_format = str(video_payload.get("format", "")).strip().lower()
             if requested_format not in ALLOWED_FORMATS:
                 video_errors.append(
@@ -959,7 +923,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Validate video URL
             video_link = str(video_payload.get("video_link", "")).strip()
             if not _is_valid_youtube_url(video_link):
                 video_errors.append(
@@ -970,7 +933,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Reject playlists
             if _is_playlist_url(video_link):
                 video_errors.append(
                     {
@@ -980,7 +942,6 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Validate target folder against server policy
             try:
                 _normalize_folder_path(video_payload.get("folder"))
             except ValueError as exc:
@@ -997,10 +958,8 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 )
                 continue
 
-            # Video passed all validation checks
             validated_videos.append(video_payload)
 
-        # If any videos failed validation, return all errors
         if video_errors:
             return (
                 None,
@@ -1011,12 +970,8 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 400,
             )
 
-        # All videos validated successfully
         return {"videos": validated_videos}, None, 200
 
-    # Single video request validation
-
-    # Check for required fields
     missing_fields = [
         field
         for field in REQUIRED_FIELDS
@@ -1033,12 +988,10 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
             400,
         )
 
-    # Validate format
     requested_format = str(payload.get("format", "")).strip().lower()
     if requested_format not in ALLOWED_FORMATS:
         return None, {"error": "format must be either 'mp4' or 'mp3'"}, 400
 
-    # Validate video URL
     video_link = str(payload.get("video_link", "")).strip()
     if not _is_valid_youtube_url(video_link):
         return (
@@ -1049,18 +1002,15 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
             400,
         )
 
-    # Reject playlists
     if _is_playlist_url(video_link):
         return None, {"error": PLAYLIST_NOT_SUPPORTED_ERROR}, 400
 
-    # Validate target folder against server policy
     try:
         _normalize_folder_path(payload.get("folder"))
     except ValueError as exc:
         logger.warning("Invalid folder path in request payload", exc_info=True)
         return None, {"error": "Invalid folder path."}, 400
 
-    # Payload is valid
     return payload, None, 200
 
 
@@ -1071,22 +1021,18 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
         task_id: Unique task identifier.
         payload: Validated download request.
     """
-    # Mark task as in progress
     with jobs_lock:
         jobs[task_id]["status"] = "in_progress"
         jobs[task_id]["updated_at"] = _utc_iso()
 
-    # Check if this is a batch request (multiple videos)
     videos = payload.get("videos")
     if isinstance(videos, list):
-        # Process batch: download each video independently
         item_results: list[dict[str, Any]] = []
         completed_count = 0
         failed_count = 0
 
         for index, video_payload in enumerate(videos):
             try:
-                # Attempt to download this video
                 result = _download_with_pytube(video_payload)
                 item_results.append(
                     {
@@ -1097,7 +1043,6 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 )
                 completed_count += 1
             except Exception as exc:
-                # Video failed, but continue with remaining videos
                 item_results.append(
                     {
                         "index": index,
@@ -1107,11 +1052,10 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 )
                 failed_count += 1
 
-        # Update task with batch results (always mark as completed, even if some videos failed)
         with jobs_lock:
             jobs[task_id]["status"] = "completed"
             jobs[task_id]["result"] = {
-                "items": item_results,  # Individual results for each video
+                "items": item_results,
                 "summary": {
                     "total": len(videos),
                     "completed": completed_count,
@@ -1119,16 +1063,13 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 },
             }
             jobs[task_id]["updated_at"] = _utc_iso()
-            jobs[task_id]["finished_at_unix"] = time.time()  # For cleanup tracking
+            jobs[task_id]["finished_at_unix"] = time.time()
 
-        return  # Batch processing complete
+        return
 
-    # Single video request processing
     try:
-        # Attempt to download
         result = _download_with_pytube(payload)
 
-        # Update task with success result
         with jobs_lock:
             jobs[task_id]["status"] = "completed"
             jobs[task_id]["result"] = result
@@ -1136,7 +1077,6 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             jobs[task_id]["finished_at_unix"] = time.time()
 
     except Exception as exc:
-        # Download failed - record error
         with jobs_lock:
             jobs[task_id]["status"] = "failed"
             jobs[task_id]["error"] = str(exc)
@@ -1150,17 +1090,11 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
 
 
 @app.route("/api/download", methods=["POST", "HEAD", "OPTIONS"])
+@standard_endpoint("POST")
 def download() -> tuple[Any, int]:
     """Queue a download task. Returns task_id (202 Accepted)."""
-    if request.method == "OPTIONS":
-        return _options_response(["POST", "HEAD", "OPTIONS"])
-    if request.method == "HEAD":
-        return _head_response()
-
-    # Ensure background cleanup thread is running
     _ensure_cleanup_thread_started()
 
-    # Parse and validate request body
     payload = request.get_json(silent=True)
     validated_payload, error_body, status_code = _validate_payload(payload)
     if error_body is not None:
@@ -1168,7 +1102,6 @@ def download() -> tuple[Any, int]:
         extra = {k: v for k, v in error_body.items() if k != "error"}
         return _error_response(msg, status_code, **extra)
 
-    # Generate unique task ID and create task record
     task_id = str(uuid4())
     now = _utc_iso()
 
@@ -1180,7 +1113,6 @@ def download() -> tuple[Any, int]:
             "updated_at": now,
         }
 
-    # Start background worker thread for this download
     try:
         download_thread = Thread(
             target=_download_worker,
@@ -1212,17 +1144,11 @@ def download() -> tuple[Any, int]:
 
 
 @app.route("/api/task/<task_id>", methods=["GET", "HEAD", "OPTIONS"])
+@standard_endpoint("GET")
 def task_status(task_id: str) -> tuple[Any, int]:
     """Get download task status and result."""
-    if request.method == "OPTIONS":
-        return _options_response(["GET", "HEAD", "OPTIONS"])
-    if request.method == "HEAD":
-        return _head_response()
-
-    # Ensure cleanup thread is running
     _ensure_cleanup_thread_started()
 
-    # Retrieve task from in-memory store
     with jobs_lock:
         task = jobs.get(task_id)
 
@@ -1244,21 +1170,14 @@ def task_status(task_id: str) -> tuple[Any, int]:
 
 
 @app.route("/api/health", methods=["GET", "HEAD", "OPTIONS"])
+@standard_endpoint("GET")
 def health() -> tuple[Any, int]:
     """Health check with service status and task statistics."""
-    if request.method == "OPTIONS":
-        return _options_response(["GET", "HEAD", "OPTIONS"])
-    if request.method == "HEAD":
-        return _head_response()
-
-    # Ensure cleanup thread is running
     _ensure_cleanup_thread_started()
 
-    # Get snapshot of all tasks (thread-safe)
     with jobs_lock:
         snapshot = list(jobs.values())
 
-    # Calculate task counts by status
     counts = {
         "queued": 0,
         "in_progress": 0,
@@ -1401,13 +1320,19 @@ def _register_endpoints_with_servicehandler() -> None:
 
 
 def _servicehandler_keepalive_forever() -> None:
+    """Keepalive and (re-)register with ServiceHandler.
+
+    Starts immediately with no initial sleep.
+    Retries registration every 5s on failure.
+    Sends keepalive every 15s once registered.
+    Re-registers if keepalive fails.
+    """
     global SERVICEHANDLER_HASH
     config = _load_configuration()
     ph_port = config.get("servicehandlerPort", 49155)
     service_name = "YoutubeDownloader"
 
     while True:
-        time.sleep(15)
         try:
             req = PostRequest(
                 url=f"http://127.0.0.1:{ph_port}/api/question/service",
@@ -1419,13 +1344,12 @@ def _servicehandler_keepalive_forever() -> None:
             if resp.status_code == 200:
                 if not SERVICEHANDLER_HASH and isinstance(resp.json_body, dict):
                     SERVICEHANDLER_HASH = resp.json_body.get("hash")
+                time.sleep(15)
                 continue
-            if resp.status_code != 404:
-                logger.warning(f"ServiceHandler question failed (HTTP {resp.status_code})")
-                continue
+            SERVICEHANDLER_HASH = None
         except Exception as exc:
-            logger.warning(f"ServiceHandler question failed: {exc}")
-            continue
+            logger.warning(f"ServiceHandler keepalive failed: {exc}")
+            SERVICEHANDLER_HASH = None
 
         try:
             payload = json.dumps({
@@ -1449,14 +1373,23 @@ def _servicehandler_keepalive_forever() -> None:
                 logger.info(f"Registered with ServiceHandler, hash={SERVICEHANDLER_HASH[:16]}...")
                 if SERVICEHANDLER_HASH:
                     _register_endpoints_with_servicehandler()
+                continue
         except Exception as exc:
             logger.warning(f"ServiceHandler registration attempt failed: {exc}")
 
+        time.sleep(5)
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="YoutubeDownloader local web service.")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    args, _ = parser.parse_known_args()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+
     try:
         logging.basicConfig(
-            level=logging.INFO,
+            level=log_level,
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         )
         _initialize_service_config()

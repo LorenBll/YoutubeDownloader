@@ -48,5 +48,11 @@ python -m pip install --quiet -r requirements.txt
 [ $VERBOSE -eq 1 ] && echo "Dependencies installed."
 
 # Start YoutubeDownloader.
-[ $VERBOSE -eq 1 ] && echo "" && echo "YoutubeDownloader starting..." && echo ""
-python src/main.py
+if [ $VERBOSE -eq 1 ]; then
+  echo ""
+  echo "YoutubeDownloader starting..."
+  echo ""
+  python src/main.py --verbose
+else
+  python src/main.py
+fi
