@@ -12,7 +12,6 @@ import os
 import shutil
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -24,6 +23,29 @@ from urllib.parse import parse_qs, urlparse
 import urllib.error
 import urllib.request
 from uuid import uuid4
+
+# ============================================================================
+# STARTUP DEPENDENCY CHECK
+# ============================================================================
+_missing_libraries: list[str] = []
+for _module, _package in {
+    "flask": "Flask",
+    "pytube": "pytube",
+    "pytubefix": "pytubefix",
+}.items():
+    try:
+        __import__(_module)
+    except ImportError:
+        _missing_libraries.append(_package)
+
+if _missing_libraries:
+    import sys
+    sys.stderr.write(
+        "ERROR: Missing required libraries: "
+        + ", ".join(_missing_libraries)
+        + ". Install them with: pip install -r requirements.txt\n"
+    )
+    sys.exit(1)
 
 from flask import Flask, jsonify, request
 
@@ -1024,6 +1046,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
     with jobs_lock:
         jobs[task_id]["status"] = "in_progress"
         jobs[task_id]["updated_at"] = _utc_iso()
+    logger.info(f"Download task started: task_id={task_id}")
 
     videos = payload.get("videos")
     if isinstance(videos, list):
@@ -1043,6 +1066,9 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 )
                 completed_count += 1
             except Exception as exc:
+                logger.error(
+                    f"Download failed for batch item {index} in task {task_id}: {exc}"
+                )
                 item_results.append(
                     {
                         "index": index,
@@ -1064,6 +1090,10 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             }
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
+        logger.info(
+            f"Download task completed: task_id={task_id}, "
+            f"completed={completed_count}, failed={failed_count}"
+        )
 
         return
 
@@ -1075,6 +1105,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             jobs[task_id]["result"] = result
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
+        logger.info(f"Download task completed: task_id={task_id}")
 
     except Exception as exc:
         with jobs_lock:
@@ -1082,6 +1113,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             jobs[task_id]["error"] = str(exc)
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
+        logger.error(f"Download task failed: task_id={task_id}, error={exc}")
 
 
 # ============================================================================
@@ -1122,6 +1154,7 @@ def download() -> tuple[Any, int]:
         )
         download_thread.start()
     except Exception as exc:
+        logger.error(f"Failed to start download worker for task {task_id}: {exc}")
         with jobs_lock:
             jobs[task_id]["status"] = "failed"
             jobs[task_id]["error"] = f"Failed to start download worker: {exc}"
@@ -1133,12 +1166,19 @@ def download() -> tuple[Any, int]:
             task_id=task_id,
         )
 
+    video_count = (
+        len(validated_payload["videos"])
+        if isinstance(validated_payload.get("videos"), list)
+        else 1
+    )
+    logger.info(f"Download queued: task_id={task_id}, video_count={video_count}")
+
     response_body: dict[str, Any] = {
         "task_id": task_id,
         "status": "queued",
     }
     if isinstance(validated_payload.get("videos"), list):
-        response_body["video_count"] = len(validated_payload["videos"])
+        response_body["video_count"] = video_count
 
     return _success_response(response_body, 202)
 
@@ -1344,6 +1384,7 @@ def _servicehandler_keepalive_forever() -> None:
             if resp.status_code == 200:
                 if not SERVICEHANDLER_HASH and isinstance(resp.json_body, dict):
                     SERVICEHANDLER_HASH = resp.json_body.get("hash")
+                logger.debug(f"ServiceHandler keepalive OK: {service_name}")
                 time.sleep(15)
                 continue
             SERVICEHANDLER_HASH = None
@@ -1388,9 +1429,16 @@ if __name__ == "__main__":
     log_level = logging.DEBUG if args.verbose else logging.INFO
 
     try:
+        log_dir = Path(__file__).resolve().parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / f"{datetime.now().strftime('%d-%m-%Y_%H.%M.%S')}.log"
         logging.basicConfig(
             level=log_level,
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            handlers=[
+                logging.StreamHandler(),
+                logging.FileHandler(log_file, encoding="utf-8"),
+            ],
         )
         _initialize_service_config()
     except Exception as exc:

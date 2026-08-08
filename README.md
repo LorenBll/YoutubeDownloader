@@ -39,6 +39,7 @@ This service can optionally register with [ServiceHandler](https://www.github.co
 |----------|---------|-------------|
 | `TASK_RETENTION_MINUTES` | `30` | Minutes before completed/failed tasks are removed. |
 | `TASK_CLEANUP_INTERVAL_SECONDS` | `60` | Seconds between task cleanup cycles. |
+| `FFMPEG_PATH` | `(from PATH)` | Optional explicit path to the `ffmpeg` executable used for merging adaptive MP4 streams above 720p. |
 
 ## Run
 
@@ -58,7 +59,7 @@ All `/api/*` endpoints are local-device only. Requests from non-local addresses 
 
 - `403` -> `{ "error": "Local device access only." }`
 - All endpoints also support `HEAD` and `OPTIONS`.
-- API responses use `Connection: close`.
+- JSON API responses use `Connection: close`; HTML responses use `Connection: keep-alive`.
 
 ## API Endpoints
 
