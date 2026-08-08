@@ -70,7 +70,7 @@ Queues a single or batch download task and returns a task ID.
 - Body (JSON object):
 	- `video_link` (string, required): valid YouTube URL (`youtube.com`, `youtu.be`, or `m.youtube.com`). Playlists are rejected.
 	- `format` (string, required): `mp4` or `mp3`.
-	- `quality` (string, required): mp4: `720`, `720p`, `1080`, `1080p`; mp3: `128`, `128kbps`, `160`, `160kbps`.
+	- `quality` (string, required): numeric quality value. mp4: any resolution (e.g. `720`, `720p`, `1080`, `1080p`). mp3: any bitrate (e.g. `128`, `128kbps`, `160`, `160kbps`).
 	- `folder` (string, required): destination folder path (created if missing). Must be allowed by `resources/configuration.json`.
 	- `name` (string, optional): preferred file name stem.
 	- `file_name` (string, optional): alternative to `name`.
