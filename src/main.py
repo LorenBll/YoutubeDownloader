@@ -7,13 +7,13 @@ import functools
 import importlib
 import ipaddress
 import json
-import logging
 import os
 import shutil
 import socket
 import subprocess
 import tempfile
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock, Thread
@@ -51,7 +51,7 @@ from flask import Flask, jsonify, request
 
 from models import PostRequest, PostResponse
 
-logger = logging.getLogger(__name__)
+from logginglib import init_logging, log_debug, log_error, log_info, log_warn
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "resources" / "configuration.json"
 DEFAULT_SERVICE_PORT = 49156
@@ -71,7 +71,7 @@ def _resolve_youtube_client() -> tuple[Any, str]:
             module = importlib.import_module(module_name)
             youtube_class = getattr(module, "YouTube", None)
             if youtube_class is not None:
-                logger.debug(f"Resolved YouTube client library: {module_name}")
+                log_debug(f"Resolved YouTube client library: {module_name}")
                 return youtube_class, module_name
         except ImportError:
             continue
@@ -108,7 +108,7 @@ try:
     TASK_RETENTION_MINUTES = int(os.getenv("TASK_RETENTION_MINUTES", "30"))
 except (ValueError, TypeError):
     TASK_RETENTION_MINUTES = 30
-    logger.warning(
+    log_warn(
         "TASK_RETENTION_MINUTES env var is invalid; using default of 30 minutes"
     )
 
@@ -118,7 +118,7 @@ try:
     )
 except (ValueError, TypeError):
     TASK_CLEANUP_INTERVAL_SECONDS = 60
-    logger.warning(
+    log_warn(
         "TASK_CLEANUP_INTERVAL_SECONDS env var is invalid; using default of 60 seconds"
     )
 
@@ -135,7 +135,7 @@ def _load_configuration() -> dict[str, Any]:
     """Load configuration from resources/configuration.json (cached after first call)."""
     global _CONFIG_CACHE
     if _CONFIG_CACHE is not None:
-        logger.debug("Configuration loaded from cache")
+        log_debug("Configuration loaded from cache")
         return _CONFIG_CACHE
 
     if not CONFIG_PATH.exists():
@@ -152,7 +152,7 @@ def _load_configuration() -> dict[str, Any]:
         raise RuntimeError("Failed to read configuration file") from exc
 
     _CONFIG_CACHE = config
-    logger.debug(f"Loaded configuration from {CONFIG_PATH}")
+    log_debug(f"Loaded configuration from {CONFIG_PATH}")
     return config
 
 
@@ -217,7 +217,7 @@ def _initialize_service_config() -> None:
 
     ALLOWED_ROOTS = allowedRoots
     BLACKLISTED_ROOTS = blacklistedRoots
-    logger.debug(
+    log_debug(
         f"Service config resolved: port={SERVICE_PORT}, "
         f"allowed_roots={len(ALLOWED_ROOTS)}, blacklisted_roots={len(BLACKLISTED_ROOTS)}"
     )
@@ -304,11 +304,11 @@ def _is_local_request() -> bool:
 def restrict_to_local_device() -> tuple | None:
     if request.path.startswith("/api/"):
         if not _is_local_request():
-            logger.warning(
+            log_warn(
                 f"Blocked non-local request to {request.path} from {request.remote_addr}"
             )
             return _error_response("Local device access only.", 403)
-        logger.debug(
+        log_debug(
             f"Local request allowed: {request.method} {request.path} from {request.remote_addr}"
         )
 
@@ -539,12 +539,15 @@ def _cleanup_finished_jobs_forever() -> None:
                     jobs.pop(task_id, None)
 
             if removable_task_ids:
-                logger.info(
+                log_info(
                     f"Cleanup removed {len(removable_task_ids)} stale task(s)"
                 )
 
         except Exception as exc:
-            logger.error("Cleanup Thread Error: %s", exc, exc_info=True)
+            log_error(
+                "Cleanup thread error",
+                {"error": str(exc), "traceback": traceback.format_exc()},
+            )
 
 
 def _ensure_cleanup_thread_started() -> None:
@@ -560,7 +563,7 @@ def _ensure_cleanup_thread_started() -> None:
         )
         cleanup_thread.start()
         cleanup_thread_started = True
-        logger.info("Cleanup thread started: youtube-task-cleanup-worker")
+        log_info("Cleanup thread started: youtube-task-cleanup-worker")
 
 
 # ============================================================================
@@ -608,7 +611,7 @@ def _select_best_stream(
         ((h, s) for h, s in available if h <= requested_height), available[-1]
     )
     if requested_height > available[0][0]:
-        logger.warning(
+        log_warn(
             f"Requested quality {requested_height}p exceeds maximum available "
             f"{available[0][0]}p; clamping to {chosen_height}p"
         )
@@ -641,7 +644,7 @@ def _select_best_audio_stream_for_mp4(yt: Any) -> Any:
             .first()
         )
         if stream is None:
-            logger.warning(
+            log_warn(
                 "No audio/mp4 stream available; falling back to best available audio stream"
             )
             stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
@@ -662,7 +665,7 @@ def _resolve_ffmpeg_path() -> str:
     env_path = os.getenv("FFMPEG_PATH")
     if env_path:
         if Path(env_path).exists():
-            logger.debug(f"Using ffmpeg from FFMPEG_PATH env: {env_path}")
+            log_debug(f"Using ffmpeg from FFMPEG_PATH env: {env_path}")
             return env_path
         raise ValueError(
             f"FFMPEG_PATH was set to '{env_path}' but the file does not exist. "
@@ -671,7 +674,7 @@ def _resolve_ffmpeg_path() -> str:
 
     ffmpeg_path = shutil.which("ffmpeg")
     if ffmpeg_path:
-        logger.debug(f"Using ffmpeg from PATH: {ffmpeg_path}")
+        log_debug(f"Using ffmpeg from PATH: {ffmpeg_path}")
         return ffmpeg_path
     raise ValueError(
         "ffmpeg is required to merge high-quality mp4 streams, but it was not found. "
@@ -758,7 +761,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("format must be either 'mp4' or 'mp3'")
 
     normalized_quality = _normalize_quality(quality, requested_format)
-    logger.debug(
+    log_debug(
         f"Download request: format={requested_format}, quality={quality}, "
         f"normalized_quality={normalized_quality}"
     )
@@ -775,7 +778,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
     except (ValueError, TypeError) as exc:
         raise ValueError(str(exc)) from exc
 
-    logger.debug(f"Resolved download folder: {save_dir}")
+    log_debug(f"Resolved download folder: {save_dir}")
 
     try:
         yt = YouTubeClient(video_link)
@@ -800,7 +803,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
             f"Upstream error: HTTP {exc.code}."
         ) from exc
 
-    logger.debug(f"Video title: {video_title}")
+    log_debug(f"Video title: {video_title}")
 
     save_name = requested_name if requested_name else video_title
     safe_stem = _build_safe_filename(save_name)
@@ -820,13 +823,13 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 )
             except ValueError:
                 use_adaptive = True
-                logger.warning(
+                log_warn(
                     f"Progressive mp4 stream unavailable for quality {normalized_quality}; "
                     "falling back to adaptive stream"
                 )
 
         if not use_adaptive:
-            logger.debug(
+            log_debug(
                 f"Using progressive mp4 stream for quality {normalized_quality}"
             )
             try:
@@ -852,10 +855,10 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                     f"Unexpected error downloading mp4 stream: {exc}"
                 ) from exc
 
-            logger.debug(
+            log_debug(
                 f"Progressive stream downloaded: {selected_height}p to {output_path}"
             )
-            logger.debug(
+            log_debug(
                 f"Downloaded video in {time.time() - _download_started_at:.2f}s: "
                 f"title={video_title!r}, requested={normalized_quality}, "
                 f"actual={selected_height}p"
@@ -870,7 +873,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
             }
 
         ffmpeg_path = _resolve_ffmpeg_path()
-        logger.debug(f"Using adaptive mp4 stream for quality {normalized_quality}")
+        log_debug(f"Using adaptive mp4 stream for quality {normalized_quality}")
 
         selected_height, video_stream = _select_adaptive_mp4_stream(
             yt, normalized_quality
@@ -894,7 +897,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 )
 
                 output_path = _resolve_unique_path(save_dir, safe_stem, ".mp4")
-                logger.debug(f"Merging video+audio with ffmpeg to {output_path}")
+                log_debug(f"Merging video+audio with ffmpeg to {output_path}")
                 _merge_av_with_ffmpeg(ffmpeg_path, video_path, audio_path, output_path)
 
         except HTTPError as exc:
@@ -913,7 +916,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Unexpected error downloading high-quality mp4 stream: {exc}"
             ) from exc
 
-        logger.debug(
+        log_debug(
             f"Downloaded video in {time.time() - _download_started_at:.2f}s: "
             f"title={video_title!r}, requested={normalized_quality}, "
             f"actual={selected_height}p, merge=ffmpeg"
@@ -929,7 +932,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
     stream = _select_audio_stream(yt, normalized_quality)
-    logger.debug(f"Using audio stream for quality {normalized_quality}")
+    log_debug(f"Using audio stream for quality {normalized_quality}")
 
     try:
         target_path = _resolve_unique_path(save_dir, safe_stem, ".mp3")
@@ -951,7 +954,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Unexpected error downloading audio stream: {exc}") from exc
 
     if downloaded_path != target_path and downloaded_path.exists():
-        logger.debug(f"Renaming mp3 to {target_path}")
+        log_debug(f"Renaming mp3 to {target_path}")
         try:
             downloaded_path.replace(target_path)
         except (OSError, PermissionError) as exc:
@@ -960,7 +963,7 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Details: {exc}"
             ) from exc
 
-    logger.debug(
+    log_debug(
         f"Downloaded audio in {time.time() - _download_started_at:.2f}s: "
         f"title={video_title!r}, requested={normalized_quality}"
     )
@@ -979,13 +982,13 @@ def _download_with_pytube(payload: dict[str, Any]) -> dict[str, Any]:
 def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, int]:
     """Validate download request payload (single or batch)."""
     if not isinstance(payload, dict):
-        logger.warning("Validation failed: request body is not a JSON object")
+        log_warn("Validation failed: request body is not a JSON object")
         return None, {"error": "Request body must be valid JSON."}, 400
 
     videos_payload = payload.get("videos")
     if videos_payload is not None:
         if not isinstance(videos_payload, list) or not videos_payload:
-            logger.warning("Validation failed: videos must be a non-empty array")
+            log_warn("Validation failed: videos must be a non-empty array")
             return None, {"error": "videos must be a non-empty array."}, 400
 
         video_errors: list[dict[str, Any]] = []
@@ -993,7 +996,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
 
         for index, video_payload in enumerate(videos_payload):
             if not isinstance(video_payload, dict):
-                logger.warning(
+                log_warn(
                     f"Validation failed: batch item at index {index} is not a JSON object"
                 )
                 video_errors.append(
@@ -1010,7 +1013,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 if field not in video_payload or str(video_payload[field]).strip() == ""
             ]
             if missing_fields:
-                logger.warning(
+                log_warn(
                     f"Validation failed: batch item at index {index} is missing fields: {missing_fields}"
                 )
                 video_errors.append(
@@ -1024,7 +1027,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
 
             requested_format = str(video_payload.get("format", "")).strip().lower()
             if requested_format not in ALLOWED_FORMATS:
-                logger.warning(
+                log_warn(
                     f"Validation failed: invalid format '{requested_format}' for batch item at index {index}"
                 )
                 video_errors.append(
@@ -1037,7 +1040,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
 
             video_link = str(video_payload.get("video_link", "")).strip()
             if not _is_valid_youtube_url(video_link):
-                logger.warning(
+                log_warn(
                     f"Validation failed: invalid YouTube URL for batch item at index {index}: {video_link}"
                 )
                 video_errors.append(
@@ -1049,7 +1052,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
                 continue
 
             if _is_playlist_url(video_link):
-                logger.warning(
+                log_warn(
                     f"Validation failed: playlist URL not supported for batch item at index {index}"
                 )
                 video_errors.append(
@@ -1063,10 +1066,9 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
             try:
                 _normalize_folder_path(video_payload.get("folder"))
             except ValueError as exc:
-                logger.warning(
-                    "Invalid folder path in batch payload at index %s",
-                    index,
-                    exc_info=True,
+                log_warn(
+                    "Invalid folder path in batch payload",
+                    {"index": index, "error": str(exc), "traceback": traceback.format_exc()},
                 )
                 video_errors.append(
                     {
@@ -1097,7 +1099,7 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
     ]
 
     if missing_fields:
-        logger.warning(
+        log_warn(
             f"Validation failed: missing required fields: {missing_fields}"
         )
         return (
@@ -1111,12 +1113,12 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
 
     requested_format = str(payload.get("format", "")).strip().lower()
     if requested_format not in ALLOWED_FORMATS:
-        logger.warning(f"Validation failed: invalid format '{requested_format}'")
+        log_warn(f"Validation failed: invalid format '{requested_format}'")
         return None, {"error": "format must be either 'mp4' or 'mp3'"}, 400
 
     video_link = str(payload.get("video_link", "")).strip()
     if not _is_valid_youtube_url(video_link):
-        logger.warning(f"Validation failed: invalid YouTube URL: {video_link}")
+        log_warn(f"Validation failed: invalid YouTube URL: {video_link}")
         return (
             None,
             {
@@ -1126,13 +1128,16 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, Any | None, 
         )
 
     if _is_playlist_url(video_link):
-        logger.warning("Validation failed: playlist URL is not supported")
+        log_warn("Validation failed: playlist URL is not supported")
         return None, {"error": PLAYLIST_NOT_SUPPORTED_ERROR}, 400
 
     try:
         _normalize_folder_path(payload.get("folder"))
     except ValueError as exc:
-        logger.warning("Invalid folder path in request payload", exc_info=True)
+        log_warn(
+            "Invalid folder path in request payload",
+            {"error": str(exc), "traceback": traceback.format_exc()},
+        )
         return None, {"error": "Invalid folder path."}, 400
 
     return payload, None, 200
@@ -1148,7 +1153,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
     with jobs_lock:
         jobs[task_id]["status"] = "in_progress"
         jobs[task_id]["updated_at"] = _utc_iso()
-    logger.info(f"Download task started: task_id={task_id}")
+    log_info(f"Download task started: task_id={task_id}")
 
     videos = payload.get("videos")
     if isinstance(videos, list):
@@ -1168,12 +1173,9 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 )
                 completed_count += 1
             except Exception as exc:
-                logger.error(
-                    "Download failed for batch item %s in task %s: %s",
-                    index,
-                    task_id,
-                    exc,
-                    exc_info=True,
+                log_error(
+                    "Download failed for batch item in task",
+                    {"index": index, "task_id": task_id, "error": str(exc), "traceback": traceback.format_exc()},
                 )
                 item_results.append(
                     {
@@ -1185,7 +1187,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
                 failed_count += 1
 
         if failed_count == len(videos) and failed_count > 0:
-            logger.warning(
+            log_warn(
                 f"Entire batch failed for task {task_id}: "
                 f"{failed_count}/{len(videos)} items failed"
             )
@@ -1202,7 +1204,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             }
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
-        logger.info(
+        log_info(
             f"Download task completed: task_id={task_id}, "
             f"completed={completed_count}, failed={failed_count}"
         )
@@ -1217,7 +1219,7 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             jobs[task_id]["result"] = result
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
-        logger.info(
+        log_info(
             f"Download task completed: task_id={task_id}, "
             f"name={result.get('name', '')}, format={result.get('format', '')}"
         )
@@ -1228,11 +1230,9 @@ def _download_worker(task_id: str, payload: dict[str, Any]) -> None:
             jobs[task_id]["error"] = str(exc)
             jobs[task_id]["updated_at"] = _utc_iso()
             jobs[task_id]["finished_at_unix"] = time.time()
-        logger.error(
-            "Download task failed: task_id=%s, error=%s",
-            task_id,
-            exc,
-            exc_info=True,
+        log_error(
+            "Download task failed",
+            {"task_id": task_id, "error": str(exc), "traceback": traceback.format_exc()},
         )
 
 
@@ -1247,7 +1247,7 @@ def download() -> tuple[Any, int]:
     """Queue a download task. Returns task_id (202 Accepted)."""
     _ensure_cleanup_thread_started()
 
-    logger.info(f"Incoming download request from {request.remote_addr}")
+    log_info(f"Incoming download request from {request.remote_addr}")
 
     payload = request.get_json(silent=True)
     validated_payload, error_body, status_code = _validate_payload(payload)
@@ -1276,11 +1276,9 @@ def download() -> tuple[Any, int]:
         )
         download_thread.start()
     except Exception as exc:
-        logger.error(
-            "Failed to start download worker for task %s: %s",
-            task_id,
-            exc,
-            exc_info=True,
+        log_error(
+            "Failed to start download worker",
+            {"task_id": task_id, "error": str(exc), "traceback": traceback.format_exc()},
         )
         with jobs_lock:
             jobs[task_id]["status"] = "failed"
@@ -1298,11 +1296,11 @@ def download() -> tuple[Any, int]:
         if isinstance(validated_payload.get("videos"), list)
         else 1
     )
-    logger.info(
+    log_info(
         f"Download request accepted from {request.remote_addr}: "
         f"task_id={task_id}, video_count={video_count}"
     )
-    logger.info(f"Download queued: task_id={task_id}, video_count={video_count}")
+    log_info(f"Download queued: task_id={task_id}, video_count={video_count}")
 
     response_body: dict[str, Any] = {
         "task_id": task_id,
@@ -1320,7 +1318,7 @@ def task_status(task_id: str) -> tuple[Any, int]:
     """Get download task status and result."""
     _ensure_cleanup_thread_started()
 
-    logger.info(
+    log_info(
         f"Incoming request: GET /api/task/{task_id} from {request.remote_addr}"
     )
 
@@ -1328,7 +1326,7 @@ def task_status(task_id: str) -> tuple[Any, int]:
         task = jobs.get(task_id)
 
     if task is None:
-        logger.warning(f"Task not found: task_id={task_id}")
+        log_warn(f"Task not found: task_id={task_id}")
         return _error_response("Task not found.", 404)
 
     response_body: dict[str, Any] = {
@@ -1401,7 +1399,7 @@ def _send_post_request(request: PostRequest) -> PostResponse:
             body_size = len(body)
             headers = dict(resp.headers)
             json_body = json.loads(body) if body else None
-            logger.debug(
+            log_debug(
                 f"POST {request.url} -> HTTP {resp.status} ({body_size} bytes)"
             )
             return PostResponse(
@@ -1417,7 +1415,7 @@ def _send_post_request(request: PostRequest) -> PostResponse:
         body_size = len(body)
         headers = dict(exc.headers)
         json_body = json.loads(body) if body else None
-        logger.debug(
+        log_debug(
             f"POST {request.url} -> HTTP {exc.code} ({body_size} bytes)"
         )
         return PostResponse(
@@ -1429,8 +1427,9 @@ def _send_post_request(request: PostRequest) -> PostResponse:
             json_body=json_body,
         )
     except (urllib.error.URLError, TimeoutError) as exc:
-        logger.error(
-            "POST request to %s failed: %s", request.url, exc, exc_info=True
+        log_error(
+            "POST request failed",
+            {"url": request.url, "error": str(exc), "traceback": traceback.format_exc()},
         )
         raise
 
@@ -1497,13 +1496,13 @@ def _register_endpoints_with_servicehandler() -> None:
             )
             resp = _send_post_request(req)
             if resp.status_code == 201:
-                logger.info(f"Registered endpoint: {ep['verb']} {ep['path']}")
+                log_info(f"Registered endpoint: {ep['verb']} {ep['path']}")
             elif resp.status_code == 409:
-                logger.debug(f"Endpoint already registered: {ep['verb']} {ep['path']}")
+                log_debug(f"Endpoint already registered: {ep['verb']} {ep['path']}")
             else:
-                logger.warning(f"Failed to register endpoint {ep['verb']} {ep['path']} (HTTP {resp.status_code})")
+                log_warn(f"Failed to register endpoint {ep['verb']} {ep['path']} (HTTP {resp.status_code})")
         except Exception as exc:
-            logger.warning(f"Failed to register endpoint {ep['verb']} {ep['path']}: {exc}")
+            log_warn(f"Failed to register endpoint {ep['verb']} {ep['path']}: {exc}")
 
 
 def _servicehandler_keepalive_forever() -> None:
@@ -1519,7 +1518,7 @@ def _servicehandler_keepalive_forever() -> None:
     ph_port = config.get("servicehandlerPort", 49155)
     service_name = "YoutubeDownloader"
 
-    logger.info("ServiceHandler keepalive thread started")
+    log_info("ServiceHandler keepalive thread started")
 
     while True:
         try:
@@ -1534,15 +1533,15 @@ def _servicehandler_keepalive_forever() -> None:
                 if not SERVICEHANDLER_HASH and isinstance(resp.json_body, dict):
                     SERVICEHANDLER_HASH = resp.json_body.get("hash")
                     if SERVICEHANDLER_HASH:
-                        logger.info(
+                        log_info(
                             f"ServiceHandler reachable, hash={str(SERVICEHANDLER_HASH)[:16]}..."
                         )
-                logger.debug(f"ServiceHandler keepalive OK: {service_name}")
+                log_debug(f"ServiceHandler keepalive OK: {service_name}")
                 time.sleep(15)
                 continue
             SERVICEHANDLER_HASH = None
         except Exception as exc:
-            logger.warning(f"ServiceHandler keepalive failed: {exc}")
+            log_warn(f"ServiceHandler keepalive failed: {exc}")
             SERVICEHANDLER_HASH = None
 
         try:
@@ -1564,39 +1563,28 @@ def _servicehandler_keepalive_forever() -> None:
             resp = _send_post_request(req)
             if resp.status_code == 201:
                 SERVICEHANDLER_HASH = resp.json_body.get("hash")
-                logger.info(f"Registered with ServiceHandler, hash={SERVICEHANDLER_HASH[:16]}...")
+                log_info(f"Registered with ServiceHandler, hash={SERVICEHANDLER_HASH[:16]}...")
                 if SERVICEHANDLER_HASH:
                     _register_endpoints_with_servicehandler()
                 continue
         except Exception as exc:
-            logger.warning(f"ServiceHandler registration attempt failed: {exc}")
+            log_warn(f"ServiceHandler registration attempt failed: {exc}")
 
         time.sleep(5)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="YoutubeDownloader local web service.")
-    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args, _ = parser.parse_known_args()
 
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-
     try:
-        log_dir = Path(__file__).resolve().parent.parent / "logs"
-        log_dir.mkdir(exist_ok=True)
-        log_file = log_dir / f"{datetime.now().strftime('%d-%m-%Y_%H.%M.%S')}.log"
-        logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(log_file, encoding="utf-8"),
-            ],
-        )
+        init_logging("YoutubeDownloader", debug=args.debug)
         _initialize_service_config()
     except Exception as exc:
-        logger.error(
-            "Failed to load configuration: %s", exc, exc_info=True
+        log_error(
+            "Failed to load configuration",
+            {"error": str(exc), "traceback": traceback.format_exc()},
         )
         exit(1)
 
@@ -1612,15 +1600,15 @@ if __name__ == "__main__":
         servicehandler_thread.start()
 
     try:
-        logger.info("=" * 50)
-        logger.info("  YoutubeDownloader API Server")
-        logger.info("=" * 50)
-        logger.info(f"Binding to: http://{SERVICE_BIND_ADDRESS}:{SERVICE_PORT}")
-        logger.info("Threading: enabled")
-        logger.info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
-        logger.info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
-        logger.info(f"Cleanup Interval: {TASK_CLEANUP_INTERVAL_SECONDS} seconds")
-        logger.info("Server starting...")
+        log_info("=" * 50)
+        log_info("  YoutubeDownloader API Server")
+        log_info("=" * 50)
+        log_info(f"Binding to: http://{SERVICE_BIND_ADDRESS}:{SERVICE_PORT}")
+        log_info("Threading: enabled")
+        log_info(f"YouTube Client: {YOUTUBE_CLIENT_NAME}")
+        log_info(f"Task Retention: {TASK_RETENTION_MINUTES} minutes")
+        log_info(f"Cleanup Interval: {TASK_CLEANUP_INTERVAL_SECONDS} seconds")
+        log_info("Server starting...")
         app.run(
             host=SERVICE_BIND_ADDRESS,
             port=SERVICE_PORT,
@@ -1629,23 +1617,29 @@ if __name__ == "__main__":
         )
 
     except KeyboardInterrupt:
-        logger.info("=" * 50)
-        logger.info("  Server Stopped")
-        logger.info("=" * 50)
+        log_info("=" * 50)
+        log_info("  Server Stopped")
+        log_info("=" * 50)
 
     except OSError as exc:
         if "Address already in use" in str(exc):
-            logger.error(
+            log_error(
                 f"Port {SERVICE_PORT} is already in use. "
                 f"Either stop the other process, or change the port in resources/configuration.json"
             )
         elif "Permission denied" in str(exc):
-            logger.error(
+            log_error(
                 f"Permission denied to bind to port {SERVICE_PORT}. "
                 f"On Linux/macOS, use a port >= 1024 or run with sudo."
             )
         else:
-            logger.error("Network binding failed: %s", exc, exc_info=True)
+            log_error(
+                "Network binding failed",
+                {"error": str(exc), "traceback": traceback.format_exc()},
+            )
 
     except Exception as exc:
-        logger.error("Server startup failed: %s", exc, exc_info=True)
+        log_error(
+            "Server startup failed",
+            {"error": str(exc), "traceback": traceback.format_exc()},
+        )

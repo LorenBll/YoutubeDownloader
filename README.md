@@ -43,9 +43,11 @@ This service can optionally register with [ServiceHandler](https://www.github.co
 
 ## Run
 
-1. Windows: run `scripts\run.bat` (add `--verbose` for debug output).
-2. Unix-like: run `bash scripts/run.sh` (add `--verbose` for debug output).
-3. Manual: run `python src/main.py` from the project root (add `--verbose` for debug output).
+1. Windows: run `scripts\run.bat` (add `--debug` for debug output).
+2. Unix-like: run `bash scripts/run.sh` (add `--debug` for debug output).
+3. Manual: run `python src/main.py` from the project root (add `--debug` for debug output).
+
+Log events are written as JSON to `logs/` (one file per run, named `DD-MM-YYYY_HH.MM.SS.json`). Each event contains `timestamp`, `type` (`ERROR`, `WARN`, `INFO`, `DEBUG`), `title`, `data`, and a `hash`. `DEBUG` events are only recorded when running with `--debug`. Log files older than 14 days are removed automatically at startup.
 
 The `deployment/` directory contains platform-specific startup configurations:
 
